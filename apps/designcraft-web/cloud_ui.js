@@ -77,15 +77,15 @@ export function showCloudToast({ type = 'success', title = 'Éxito', message = '
   toast.innerHTML = `
     ${iconSvg}
     <div style="flex: 1; min-width: 0;">
-      <div style="font-weight: 700; font-size: 14px; color: #0f172a; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
+      <div style="font-weight: 700; font-size: 16px; color: #0f172a; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
         ${title}
       </div>
-      <div style="font-size: 12.5px; color: #475569; line-height: 1.5; word-break: break-word;">
+      <div style="font-size: 14px; color: #475569; line-height: 1.5; word-break: break-word;">
         ${message}
       </div>
     </div>
-    <button class="toast-close-btn" style="background: none; border: none; font-size: 22px; line-height: 1; color: #94a3b8; cursor: pointer; padding: 0 0 0 8px; margin: -4px -4px 0 0; transition: color 0.15s ease;" title="Cerrar">&times;</button>
-    <div class="toast-progress-bar" style="position: absolute; bottom: 0; left: 0; height: 3px; background: ${borderColor}; width: 100%; transition: width ${duration}ms linear;"></div>
+    <button class="toast-close-btn" style="background: none; border: none; font-size: 26px; line-height: 1; color: #94a3b8; cursor: pointer; padding: 0 0 0 10px; margin: -4px -4px 0 0; transition: color 0.15s ease;" title="Cerrar">&times;</button>
+    <div class="toast-progress-bar" style="position: absolute; bottom: 0; left: 0; height: 4px; background: ${borderColor}; width: 100%; transition: width ${duration}ms linear;"></div>
   `;
 
   toastContainer.appendChild(toast);
@@ -148,33 +148,33 @@ export function showGoogleAuthModal({
   `;
 
   overlay.innerHTML = `
-    <div style="background: #ffffff; border-radius: 16px; width: 480px; max-width: 100%; box-shadow: 0 25px 50px -12px rgba(220, 38, 38, 0.35); overflow: hidden; border: 2px solid #ef4444; animation: cloudModalIn 0.2s ease-out;">
-      <div style="background: #fef2f2; padding: 20px 24px; border-bottom: 1px solid #fee2e2; display: flex; align-items: center; justify-content: space-between; gap: 14px;">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div style="width: 42px; height: 42px; border-radius: 50%; background: #fee2e2; display: flex; align-items: center; justify-content: center; font-size: 22px; border: 1.5px solid #fca5a5; flex-shrink: 0;">
+    <div style="background: #ffffff; border-radius: 18px; width: 540px; max-width: 100%; box-shadow: 0 25px 50px -12px rgba(220, 38, 38, 0.35); overflow: hidden; border: 2px solid #ef4444; animation: cloudModalIn 0.2s ease-out;">
+      <div style="background: #fef2f2; padding: 22px 28px; border-bottom: 1px solid #fee2e2; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 48px; height: 48px; border-radius: 50%; background: #fee2e2; display: flex; align-items: center; justify-content: center; font-size: 26px; border: 1.5px solid #fca5a5; flex-shrink: 0;">
             ⚠️
           </div>
           <div>
-            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #991b1b;">${escapeHtml(title)}</h3>
-            <p style="margin: 3px 0 0 0; font-size: 12.5px; color: #b91c1c;">Autorización de Google Drive requerida</p>
+            <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: #991b1b;">${escapeHtml(title)}</h3>
+            <p style="margin: 4px 0 0 0; font-size: 14px; color: #b91c1c;">Autorización de Google Drive requerida</p>
           </div>
         </div>
-        <button id="btn-auth-alert-close-x" style="background: none; border: none; font-size: 22px; color: #94a3b8; cursor: pointer; padding: 4px; border-radius: 6px;">✕</button>
+        <button id="btn-auth-alert-close-x" style="background: none; border: none; font-size: 26px; color: #94a3b8; cursor: pointer; padding: 6px; border-radius: 6px;">✕</button>
       </div>
 
-      <div style="padding: 24px; color: #334155; font-size: 14px; line-height: 1.6;">
+      <div style="padding: 26px 28px; color: #334155; font-size: 15.5px; line-height: 1.6;">
         <p style="margin: 0 0 16px 0; font-weight: 500;">${escapeHtml(message)}</p>
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; font-size: 12.5px; color: #64748b; display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 20px;">💡</span>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; font-size: 14px; color: #64748b; display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 24px;">💡</span>
           <span>Al conectar tu cuenta de Google, el servidor editorial podrá sincronizar y descargar tus plantillas directamente a tu entorno de maquetación.</span>
         </div>
       </div>
 
-      <div style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px;">
-        <button id="btn-auth-alert-cancel" type="button" style="background: #ffffff; color: #475569; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 18px; font-size: 13.5px; font-weight: 600; cursor: pointer;">
+      <div style="padding: 18px 28px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px;">
+        <button id="btn-auth-alert-cancel" type="button" style="background: #ffffff; color: #475569; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 20px; font-size: 15px; font-weight: 600; cursor: pointer;">
           Cerrar
         </button>
-        <button id="btn-auth-alert-login" type="button" style="background: #2563eb; color: #ffffff; border: none; border-radius: 8px; padding: 10px 22px; font-size: 13.5px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35); display: flex; align-items: center; gap: 8px;">
+        <button id="btn-auth-alert-login" type="button" style="background: #2563eb; color: #ffffff; border: none; border-radius: 8px; padding: 12px 24px; font-size: 15px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35); display: flex; align-items: center; gap: 8px;">
           🔑 Iniciar Sesión con Google
         </button>
       </div>
@@ -208,40 +208,42 @@ export function initCloudUI() {
     <style>
       #cloud-pill-btn {
         position: fixed;
-        top: 10px;
-        right: 14px;
+        top: 14px;
+        right: 18px;
         z-index: 9999;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
         background: #ffffff;
         color: #1e293b;
-        border: 1px solid #cbd5e1;
-        padding: 6px 14px;
-        border-radius: 20px;
+        border: 1.5px solid #cbd5e1;
+        padding: 10px 20px;
+        border-radius: 28px;
         font-family: system-ui, -apple-system, sans-serif;
-        font-size: 13px;
-        font-weight: 500;
+        font-size: 16px;
+        font-weight: 600;
         cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        box-shadow: 0 4px 14px rgba(0,0,0,0.1);
         transition: all 0.2s ease;
       }
       #cloud-pill-btn:hover {
         background: #f8fafc;
         border-color: #3b82f6;
         color: #1d4ed8;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.18);
       }
       #cloud-pill-btn img {
-        width: 22px;
-        height: 22px;
+        width: 28px;
+        height: 28px;
         border-radius: 50%;
       }
       #cloud-modal-overlay {
         display: none;
         position: fixed;
         inset: 0;
-        background: rgba(15, 23, 42, 0.45);
-        backdrop-filter: blur(4px);
+        background: rgba(15, 23, 42, 0.55);
+        backdrop-filter: blur(5px);
         z-index: 10000;
         align-items: center;
         justify-content: center;
@@ -253,13 +255,14 @@ export function initCloudUI() {
         background: #ffffff;
         color: #0f172a;
         border: 1px solid #e2e8f0;
-        border-radius: 16px;
-        width: 1280px;
+        border-radius: 20px;
+        width: 1480px;
         max-width: 96vw;
-        height: 90vh;
-        max-height: 92vh;
-        box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+        height: 92vh;
+        max-height: 94vh;
+        box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.05);
         font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        font-size: 16px;
         display: flex;
         flex-direction: column;
         overflow: hidden;
@@ -270,7 +273,7 @@ export function initCloudUI() {
         to { transform: scale(1); opacity: 1; }
       }
       .cloud-modal-header {
-        padding: 16px 28px;
+        padding: 22px 36px;
         border-bottom: 1px solid #e2e8f0;
         display: flex;
         justify-content: space-between;
@@ -279,26 +282,26 @@ export function initCloudUI() {
       }
       .cloud-modal-header-left h3 {
         margin: 0;
-        font-size: 17px;
+        font-size: 24px;
         font-weight: 700;
         color: #0f172a;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
       }
       .cloud-modal-header-left p {
-        margin: 3px 0 0 0;
-        font-size: 12.5px;
+        margin: 5px 0 0 0;
+        font-size: 16px;
         color: #64748b;
       }
       .cloud-modal-close {
         background: none;
         border: none;
         color: #64748b;
-        font-size: 24px;
+        font-size: 32px;
         cursor: pointer;
-        padding: 4px 8px;
-        border-radius: 8px;
+        padding: 6px 14px;
+        border-radius: 10px;
         line-height: 1;
         transition: all 0.15s ease;
       }
@@ -312,22 +315,22 @@ export function initCloudUI() {
         display: flex;
         background: #f1f5f9;
         border-bottom: 1px solid #e2e8f0;
-        padding: 0 24px;
-        gap: 6px;
+        padding: 0 32px;
+        gap: 8px;
       }
       .cloud-tab-btn {
         background: none;
         border: none;
-        border-bottom: 3px solid transparent;
+        border-bottom: 3.5px solid transparent;
         color: #64748b;
-        padding: 13px 20px;
-        font-size: 13.5px;
+        padding: 16px 26px;
+        font-size: 16.5px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.15s ease;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
       }
       .cloud-tab-btn:hover {
         color: #0f172a;
@@ -339,19 +342,19 @@ export function initCloudUI() {
       }
 
       .cloud-modal-body {
-        padding: 22px 28px;
+        padding: 24px 36px;
         overflow-y: auto;
         flex: 1;
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 20px;
         background: #ffffff;
       }
 
       /* Top Controls Bar */
       .cloud-top-controls {
         display: flex;
-        gap: 14px;
+        gap: 16px;
         align-items: center;
         justify-content: space-between;
         flex-wrap: wrap;
@@ -359,17 +362,17 @@ export function initCloudUI() {
       .cloud-search-wrapper {
         position: relative;
         flex: 1;
-        min-width: 280px;
+        min-width: 320px;
       }
       .cloud-search-input {
         width: 100%;
         box-sizing: border-box;
-        padding: 10px 14px 10px 38px;
+        padding: 13px 18px 13px 48px;
         background: #f8fafc;
         color: #0f172a;
-        border: 1px solid #cbd5e1;
-        border-radius: 10px;
-        font-size: 13.5px;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 12px;
+        font-size: 16px;
         outline: none;
         transition: all 0.18s ease;
       }
@@ -380,33 +383,33 @@ export function initCloudUI() {
       }
       .cloud-search-icon {
         position: absolute;
-        left: 12px;
+        left: 16px;
         top: 50%;
         transform: translateY(-50%);
         color: #94a3b8;
         pointer-events: none;
-        font-size: 15px;
+        font-size: 19px;
       }
 
       /* Filter Pills */
       .cloud-filter-pills {
         display: flex;
-        gap: 6px;
+        gap: 8px;
         align-items: center;
       }
       .cloud-filter-pill {
         background: #f1f5f9;
         color: #475569;
-        border: 1px solid #e2e8f0;
-        padding: 7px 14px;
-        border-radius: 20px;
-        font-size: 12.5px;
+        border: 1.5px solid #e2e8f0;
+        padding: 9px 18px;
+        border-radius: 24px;
+        font-size: 15px;
         font-weight: 600;
         cursor: pointer;
         white-space: nowrap;
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
         transition: all 0.15s ease;
       }
       .cloud-filter-pill:hover {
@@ -417,7 +420,7 @@ export function initCloudUI() {
         background: #eff6ff;
         color: #1d4ed8;
         border-color: #3b82f6;
-        box-shadow: 0 1px 3px rgba(37, 99, 235, 0.18);
+        box-shadow: 0 1px 4px rgba(37, 99, 235, 0.2);
       }
 
       /* Breadcrumb Navigation */
@@ -426,29 +429,29 @@ export function initCloudUI() {
         align-items: center;
         justify-content: space-between;
         background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 10px 16px;
-        gap: 12px;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 14px 20px;
+        gap: 16px;
         flex-wrap: wrap;
       }
       .cloud-breadcrumb-left {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 14px;
       }
       .cloud-back-btn {
         background: #ffffff;
-        border: 1px solid #cbd5e1;
+        border: 1.5px solid #cbd5e1;
         color: #334155;
-        padding: 7px 14px;
-        border-radius: 8px;
-        font-size: 13px;
+        padding: 9px 18px;
+        border-radius: 10px;
+        font-size: 15px;
         font-weight: 600;
         cursor: pointer;
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
         transition: all 0.15s ease;
       }
       .cloud-back-btn:hover {
@@ -457,15 +460,15 @@ export function initCloudUI() {
         color: #0f172a;
       }
       .cloud-breadcrumb-title {
-        font-size: 15px;
+        font-size: 19px;
         font-weight: 700;
         color: #0f172a;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
       }
       .cloud-breadcrumb-count {
-        font-size: 12.5px;
+        font-size: 15px;
         color: #64748b;
         font-weight: 500;
       }
@@ -473,14 +476,14 @@ export function initCloudUI() {
       /* Folder Cards Grid (Filas y Columnas) */
       .cloud-folders-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
-        gap: 20px;
-        padding-bottom: 24px;
+        grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+        gap: 24px;
+        padding-bottom: 28px;
       }
       .cloud-folder-card {
         background: #ffffff;
         border: 1.5px solid #e2e8f0;
-        border-radius: 14px;
+        border-radius: 16px;
         overflow: hidden;
         cursor: pointer;
         transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
@@ -491,15 +494,15 @@ export function initCloudUI() {
       }
       .cloud-folder-card:hover {
         transform: translateY(-4px);
-        box-shadow: 0 16px 32px -8px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(37, 99, 235, 0.08);
+        box-shadow: 0 16px 32px -8px rgba(15, 23, 42, 0.14), 0 4px 12px rgba(37, 99, 235, 0.1);
         border-color: #93c5fd;
       }
       .cloud-folder-accent-bar {
-        height: 5px;
+        height: 6px;
         width: 100%;
       }
       .cloud-folder-body {
-        padding: 18px 20px;
+        padding: 22px 24px;
         display: flex;
         flex-direction: column;
         flex: 1;
@@ -508,58 +511,58 @@ export function initCloudUI() {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 12px;
+        margin-bottom: 14px;
       }
       .cloud-folder-icon-circle {
-        width: 42px;
-        height: 42px;
-        border-radius: 10px;
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 21px;
+        font-size: 26px;
         box-shadow: 0 2px 6px rgba(0,0,0,0.06);
       }
       .cloud-folder-count-badge {
-        font-size: 12px;
+        font-size: 14.5px;
         font-weight: 600;
-        padding: 4px 10px;
-        border-radius: 14px;
+        padding: 5px 12px;
+        border-radius: 16px;
         background: #f1f5f9;
         color: #334155;
         border: 1px solid #e2e8f0;
       }
       .cloud-folder-title {
-        font-size: 16px;
+        font-size: 19px;
         font-weight: 700;
         color: #0f172a;
-        margin: 0 0 5px 0;
+        margin: 0 0 6px 0;
       }
       .cloud-folder-desc {
-        font-size: 12px;
+        font-size: 14.5px;
         color: #64748b;
-        line-height: 1.45;
-        margin: 0 0 14px 0;
-        min-height: 35px;
+        line-height: 1.5;
+        margin: 0 0 16px 0;
+        min-height: 44px;
       }
       .cloud-folder-preview-strip {
         display: flex;
-        gap: 8px;
-        height: 84px;
+        gap: 10px;
+        height: 100px;
         background: #f8fafc;
-        border-radius: 8px;
+        border-radius: 10px;
         border: 1px solid #f1f5f9;
-        padding: 6px 10px;
+        padding: 8px 12px;
         align-items: center;
         overflow: hidden;
-        margin-bottom: 14px;
+        margin-bottom: 16px;
       }
       .cloud-folder-mini-thumb {
-        width: 58px;
-        height: 72px;
+        width: 68px;
+        height: 84px;
         background: #ffffff;
         border: 1px solid #e2e8f0;
-        border-radius: 5px;
+        border-radius: 6px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.06);
         display: flex;
         align-items: center;
@@ -577,7 +580,7 @@ export function initCloudUI() {
         object-fit: cover;
       }
       .cloud-folder-mini-placeholder {
-        font-size: 20px;
+        font-size: 24px;
         color: #94a3b8;
       }
       .cloud-folder-footer {
@@ -585,21 +588,21 @@ export function initCloudUI() {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding-top: 10px;
+        padding-top: 14px;
         border-top: 1px solid #f1f5f9;
       }
       .cloud-folder-formats {
-        font-size: 11.5px;
+        font-size: 14px;
         color: #64748b;
         font-weight: 500;
       }
       .cloud-folder-explore-btn {
-        font-size: 12.5px;
+        font-size: 15px;
         font-weight: 600;
         color: #2563eb;
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 6px;
         transition: transform 0.15s ease;
       }
       .cloud-folder-card:hover .cloud-folder-explore-btn {
@@ -612,28 +615,28 @@ export function initCloudUI() {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
       }
       .cloud-cat-badge {
-        font-size: 11px;
+        font-size: 13.5px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         color: #1d4ed8;
         background: #eff6ff;
         border: 1px solid #bfdbfe;
-        padding: 2px 8px;
-        border-radius: 4px;
-        max-width: 140px;
+        padding: 3px 10px;
+        border-radius: 6px;
+        max-width: 170px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
       .cloud-type-badge {
-        font-size: 10.5px;
+        font-size: 13px;
         font-weight: 600;
-        padding: 2px 7px;
-        border-radius: 4px;
+        padding: 3px 10px;
+        border-radius: 6px;
       }
       .type-idml {
         background: #fee2e2;
@@ -649,13 +652,13 @@ export function initCloudUI() {
       /* Template Grid */
       .cloud-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-        gap: 18px;
+        grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+        gap: 22px;
       }
       .cloud-card {
         background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 14px;
         overflow: hidden;
         cursor: pointer;
         transition: all 0.2s ease;
@@ -666,10 +669,10 @@ export function initCloudUI() {
       .cloud-card:hover {
         border-color: #2563eb;
         transform: translateY(-3px);
-        box-shadow: 0 12px 24px -6px rgba(37, 99, 235, 0.16);
+        box-shadow: 0 12px 24px -6px rgba(37, 99, 235, 0.18);
       }
       .cloud-thumb-box {
-        height: 200px;
+        height: 230px;
         background: #f8fafc;
         border-bottom: 1px solid #f1f5f9;
         display: flex;
@@ -688,48 +691,48 @@ export function initCloudUI() {
         transform: scale(1.03);
       }
       .cloud-thumb-placeholder {
-        font-size: 46px;
+        font-size: 54px;
         color: #94a3b8;
       }
       .cloud-card-body {
-        padding: 14px 16px;
+        padding: 16px 20px;
         display: flex;
         flex-direction: column;
         flex: 1;
       }
       .cloud-card-title {
-        font-size: 14px;
-        font-weight: 600;
-        margin: 0 0 4px 0;
+        font-size: 16.5px;
+        font-weight: 700;
+        margin: 0 0 6px 0;
         color: #0f172a;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
       .cloud-card-meta {
-        font-size: 12px;
+        font-size: 14px;
         color: #64748b;
-        margin: 0 0 12px 0;
+        margin: 0 0 14px 0;
       }
 
       /* Fields & Forms */
       .cloud-field label {
         display: block;
-        font-size: 12px;
-        font-weight: 600;
+        font-size: 14.5px;
+        font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         color: #475569;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
       }
       .cloud-select {
         width: 100%;
-        padding: 10px 14px;
+        padding: 12px 16px;
         background: #ffffff;
         color: #0f172a;
-        border: 1px solid #cbd5e1;
-        border-radius: 8px;
-        font-size: 14px;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 10px;
+        font-size: 15.5px;
         outline: none;
         box-sizing: border-box;
       }
@@ -741,10 +744,10 @@ export function initCloudUI() {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        padding: 10px 18px;
-        border-radius: 8px;
-        font-size: 13.5px;
+        gap: 10px;
+        padding: 12px 22px;
+        border-radius: 10px;
+        font-size: 15.5px;
         font-weight: 600;
         cursor: pointer;
         border: none;
@@ -779,23 +782,23 @@ export function initCloudUI() {
         justify-content: space-between;
         background: #f8fafc;
         border: 1px solid #e2e8f0;
-        padding: 10px 14px;
-        border-radius: 8px;
+        padding: 14px 18px;
+        border-radius: 10px;
       }
       .cloud-user-info {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
       }
       .cloud-user-info img {
-        width: 32px;
-        height: 32px;
+        width: 38px;
+        height: 38px;
         border-radius: 50%;
       }
       .cloud-status-badge {
-        font-size: 13px;
-        padding: 10px 14px;
-        border-radius: 8px;
+        font-size: 15px;
+        padding: 12px 18px;
+        border-radius: 10px;
         background: #eff6ff;
         color: #1d4ed8;
         border: 1px solid #bfdbfe;
@@ -805,11 +808,11 @@ export function initCloudUI() {
       #cloud-thumb-hover-preview {
         position: fixed;
         z-index: 1000005;
-        width: 350px;
+        width: 440px;
         max-width: 90vw;
         background: #ffffff;
-        border-radius: 16px;
-        border: 1px solid #cbd5e1;
+        border-radius: 18px;
+        border: 1.5px solid #cbd5e1;
         box-shadow: 0 24px 60px -8px rgba(15, 23, 42, 0.35), 0 4px 16px rgba(0, 0, 0, 0.08);
         display: flex;
         flex-direction: column;
@@ -826,12 +829,12 @@ export function initCloudUI() {
         transform: scale(1);
       }
       .cloud-hover-popover-header {
-        padding: 12px 16px 10px 16px;
+        padding: 16px 20px 14px 20px;
         background: #f8fafc;
         border-bottom: 1px solid #e2e8f0;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 8px;
       }
       .cloud-hover-tags {
         display: flex;
@@ -840,23 +843,23 @@ export function initCloudUI() {
         gap: 8px;
       }
       .cloud-hover-sec-tag {
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        padding: 3px 8px;
-        border-radius: 4px;
+        padding: 4px 10px;
+        border-radius: 6px;
         color: #1e40af;
         background: #dbeafe;
       }
       .cloud-hover-fmt-tag {
-        font-size: 11px;
+        font-size: 13px;
         font-weight: 700;
-        padding: 3px 8px;
-        border-radius: 4px;
+        padding: 4px 10px;
+        border-radius: 6px;
       }
       .cloud-hover-title {
-        font-size: 14px;
+        font-size: 16.5px;
         font-weight: 700;
         color: #0f172a;
         white-space: nowrap;
@@ -864,21 +867,21 @@ export function initCloudUI() {
         text-overflow: ellipsis;
       }
       .cloud-hover-preview-body {
-        padding: 14px;
+        padding: 16px;
         background: #f1f5f9;
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 400px;
-        max-height: 460px;
+        min-height: 440px;
+        max-height: 500px;
       }
       .cloud-hover-page-frame {
         width: 100%;
         height: 100%;
-        max-height: 430px;
+        max-height: 470px;
         aspect-ratio: 240 / 330;
         background: #ffffff;
-        border-radius: 6px;
+        border-radius: 8px;
         box-shadow: 0 4px 16px rgba(15, 23, 42, 0.14), 0 1px 3px rgba(0,0,0,0.06);
         border: 1px solid #cbd5e1;
         overflow: hidden;
@@ -894,13 +897,13 @@ export function initCloudUI() {
         display: block;
       }
       .cloud-hover-popover-footer {
-        padding: 10px 16px;
+        padding: 12px 20px;
         background: #ffffff;
         border-top: 1px solid #f1f5f9;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        font-size: 12px;
+        font-size: 14px;
         color: #64748b;
       }
       .cloud-hover-footer-hint {
@@ -908,7 +911,7 @@ export function initCloudUI() {
         font-weight: 600;
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 6px;
       }
 
       /* Zoom Badge on Cards */
@@ -916,8 +919,8 @@ export function initCloudUI() {
         position: absolute;
         top: 8px;
         right: 8px;
-        width: 28px;
-        height: 28px;
+        width: 36px;
+        height: 36px;
         border-radius: 50%;
         background: rgba(255, 255, 255, 0.94);
         backdrop-filter: blur(4px);
@@ -925,7 +928,7 @@ export function initCloudUI() {
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 13px;
+        font-size: 17px;
         color: #1e293b;
         opacity: 0;
         transform: scale(0.8);
@@ -1213,7 +1216,7 @@ export function initCloudUI() {
       <div class="cloud-card" data-id="${tmpl.id}" data-filename="${tmpl.filename}" title="${tmpl.name}">
         <div class="cloud-thumb-box" id="thumb-box-${tmpl.id}" data-id="${tmpl.id}">
           <div class="cloud-thumb-zoom-badge" title="Pasa el cursor para ver tamaño grande">🔍</div>
-          <div class="cloud-thumb-folder-badge" style="position:absolute; top:8px; left:8px; z-index:2; background:rgba(15,23,42,0.85); color:#ffffff; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:4px; backdrop-filter:blur(4px); pointer-events:none; max-width:85%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,0.3);">
+          <div class="cloud-thumb-folder-badge" style="position:absolute; top:8px; left:8px; z-index:2; background:rgba(15,23,42,0.85); color:#ffffff; font-size:12.5px; font-weight:700; padding:3px 9px; border-radius:6px; backdrop-filter:blur(4px); pointer-events:none; max-width:85%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,0.3);">
             📁 ${escapeHtml(catName)}
           </div>
           ${thumbUrl ? `
@@ -1230,7 +1233,7 @@ export function initCloudUI() {
           </div>
           <h4 class="cloud-card-title">${tmpl.name}</h4>
           <p class="cloud-card-meta">${sizeKb > 0 ? sizeKb + ' KB · ' : ''}${tmpl.isIdml ? 'InDesign IDML' : 'DesignCraft nativo'}</p>
-          <button class="cloud-btn cloud-btn-primary btn-use-template" style="margin-top: auto; padding: 8px 14px; font-size: 13px;">
+          <button class="cloud-btn cloud-btn-primary btn-use-template" style="margin-top: auto; padding: 11px 18px; font-size: 15px;">
             Usar Plantilla
           </button>
         </div>
@@ -1545,48 +1548,48 @@ export function initCloudUI() {
     modalContent.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
         <div>
-          <h4 style="margin: 0 0 4px 0; font-size: 16px; color: #0f172a; font-weight: 700;">Biblioteca de Maquetas y Plantillas</h4>
-          <p style="margin: 0; font-size: 13px; color: #64748b;">Navega por carpetas de sección o busca directamente para comenzar a maquetar tu página.</p>
+          <h4 style="margin: 0 0 6px 0; font-size: 20px; color: #0f172a; font-weight: 700;">Biblioteca de Maquetas y Plantillas</h4>
+          <p style="margin: 0; font-size: 15px; color: #64748b;">Navega por carpetas de sección o busca directamente para comenzar a maquetar tu página.</p>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div style="display: flex; gap: 10px; align-items: center;">
           ${auth.isAuthenticated ? `
-            <span style="font-size: 12px; color: #16a34a; font-weight: 600; display: flex; align-items: center; gap: 4px;">
-              <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#16a34a;"></span>
+            <span style="font-size: 14.5px; color: #16a34a; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+              <span style="display:inline-block; width:9px; height:9px; border-radius:50%; background:#16a34a;"></span>
               Drive Conectado
             </span>
           ` : `
-            <button class="cloud-btn cloud-btn-ghost" id="btn-auth-drive" style="padding: 6px 12px; font-size: 12px; color: #2563eb; border: 1.5px solid #2563eb; background: #eff6ff; font-weight: 600;">
+            <button class="cloud-btn cloud-btn-ghost" id="btn-auth-drive" style="padding: 9px 16px; font-size: 14.5px; color: #2563eb; border: 1.5px solid #2563eb; background: #eff6ff; font-weight: 600;">
               🔑 Iniciar Sesión Google Drive
             </button>
           `}
-          <button class="cloud-btn cloud-btn-ghost" id="btn-reload-templates" style="padding: 6px 12px; font-size: 12px;">
+          <button class="cloud-btn cloud-btn-ghost" id="btn-reload-templates" style="padding: 9px 16px; font-size: 14.5px;">
             🔄 Sincronizar con Drive
           </button>
         </div>
       </div>
 
       ${!auth.isAuthenticated ? `
-        <div style="background: #fef2f2; border: 1.5px solid #f87171; color: #991b1b; padding: 12px 16px; border-radius: 10px; margin-top: 10px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; gap: 14px; box-shadow: 0 4px 14px rgba(220, 38, 38, 0.08);">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 22px;">🔑</span>
+        <div style="background: #fef2f2; border: 1.5px solid #f87171; color: #991b1b; padding: 16px 20px; border-radius: 12px; margin-top: 12px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 16px; box-shadow: 0 4px 14px rgba(220, 38, 38, 0.08);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 26px;">🔑</span>
             <div>
-              <div style="font-weight: 700; font-size: 13.5px;">Google Drive Desconectado / Sesión Expirada</div>
-              <div style="font-size: 12.5px; color: #7f1d1d; line-height: 1.4;">Debes iniciar sesión con Google para poder descargar y abrir las plantillas de la nube en tu maqueta.</div>
+              <div style="font-weight: 700; font-size: 16px;">Google Drive Desconectado / Sesión Expirada</div>
+              <div style="font-size: 14px; color: #7f1d1d; line-height: 1.5;">Debes iniciar sesión con Google para poder descargar y abrir las plantillas de la nube en tu maqueta.</div>
             </div>
           </div>
-          <button class="cloud-btn cloud-btn-primary" id="btn-banner-auth" style="padding: 8px 16px; font-size: 13px; font-weight: 700; background: #2563eb; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; white-space: nowrap;">
+          <button class="cloud-btn cloud-btn-primary" id="btn-banner-auth" style="padding: 10px 20px; font-size: 14.5px; font-weight: 700; background: #2563eb; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; white-space: nowrap;">
             🔑 Iniciar Sesión con Google
           </button>
         </div>
       ` : ''}
 
       <div id="templates-loading-box" style="text-align: center; padding: 60px 20px; color: #64748b;">
-        <div style="font-size: 36px; margin-bottom: 12px;">⏳</div>
-        <div style="font-weight: 600; color: #0f172a; margin-bottom: 6px; font-size: 15px;" id="templates-loading-title">Cargando catálogo...</div>
-        <div style="font-size: 13px; color: #64748b;" id="templates-loading-subtext">Obteniendo carpetas y miniaturas organizadas por secciones...</div>
+        <div style="font-size: 42px; margin-bottom: 14px;">⏳</div>
+        <div style="font-weight: 600; color: #0f172a; margin-bottom: 8px; font-size: 18px;" id="templates-loading-title">Cargando catálogo...</div>
+        <div style="font-size: 15px; color: #64748b;" id="templates-loading-subtext">Obteniendo carpetas y miniaturas organizadas por secciones...</div>
       </div>
 
-      <div id="templates-content-area" style="display: none; flex-direction: column; gap: 14px; flex: 1;"></div>
+      <div id="templates-content-area" style="display: none; flex-direction: column; gap: 18px; flex: 1;"></div>
     `;
 
     document.getElementById('btn-auth-drive')?.addEventListener('click', () => {
@@ -1716,8 +1719,8 @@ export function initCloudUI() {
                 <button class="cloud-back-btn" id="btn-back-folders" title="Volver al catálogo de carpetas">
                   ← Volver a Carpetas
                 </button>
-                <span style="color: #cbd5e1; font-weight: 300;">/</span>
-                <div class="cloud-folder-icon-circle" style="width: 32px; height: 32px; font-size: 17px; background: ${meta.bgTint};">
+                <span style="color: #cbd5e1; font-weight: 300; font-size: 18px;">/</span>
+                <div class="cloud-folder-icon-circle" style="width: 40px; height: 40px; font-size: 22px; border-radius: 10px; background: ${meta.bgTint};">
                   ${meta.icon}
                 </div>
                 <span class="cloud-breadcrumb-title">${meta.name}</span>
@@ -1741,16 +1744,16 @@ export function initCloudUI() {
                 <span class="cloud-search-icon">🔍</span>
                 <input type="text" id="scoped-search-input" class="cloud-search-input" placeholder="Filtrar maquetas en ${meta.name} por nombre..." value="${activeSearchQuery}" />
               </div>
-              <div style="font-size: 12.5px; color: #64748b;">
+              <div style="font-size: 15px; color: #64748b;">
                 ${meta.desc}
               </div>
             </div>
 
             ${filtered.length === 0 ? `
               <div style="text-align: center; padding: 48px 16px; color: #64748b; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1;">
-                <div style="font-size: 32px; margin-bottom: 8px;">📂</div>
-                <div style="font-weight: 600; color: #0f172a; margin-bottom: 4px;">No se encontraron maquetas</div>
-                <div style="font-size: 13px;">No hay maquetas en ${meta.name} que coincidan con los filtros seleccionados.</div>
+                <div style="font-size: 40px; margin-bottom: 10px;">📂</div>
+                <div style="font-weight: 600; color: #0f172a; margin-bottom: 6px; font-size: 17px;">No se encontraron maquetas</div>
+                <div style="font-size: 14.5px;">No hay maquetas en ${meta.name} que coincidan con los filtros seleccionados.</div>
               </div>
             ` : `
               <div class="cloud-grid">
@@ -1816,20 +1819,20 @@ export function initCloudUI() {
               </div>
             </div>
 
-            <div style="background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; font-size: 13.5px; color: #1e40af;">
+            <div style="background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 12px; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; font-size: 15.5px; color: #1e40af;">
               <div>
                 🔎 Mostrando <strong>${filtered.length}</strong> ${filtered.length === 1 ? 'maqueta encontrada' : 'maquetas encontradas'} para "<strong>${escapeHtml(activeSearchQuery)}</strong>" en todas las secciones
               </div>
-              <button id="btn-clear-search" class="cloud-btn cloud-btn-ghost" style="padding: 6px 12px; font-size: 12.5px; background: #ffffff;">
+              <button id="btn-clear-search" class="cloud-btn cloud-btn-ghost" style="padding: 8px 16px; font-size: 14px; background: #ffffff;">
                 ✕ Limpiar y Volver a Carpetas
               </button>
             </div>
 
             ${filtered.length === 0 ? `
               <div style="text-align: center; padding: 48px 16px; color: #64748b; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1;">
-                <div style="font-size: 32px; margin-bottom: 8px;">🔍</div>
-                <div style="font-weight: 600; color: #0f172a; margin-bottom: 4px;">Sin resultados</div>
-                <div style="font-size: 13px;">No se encontraron maquetas que coincidan con "${escapeHtml(activeSearchQuery)}".</div>
+                <div style="font-size: 40px; margin-bottom: 10px;">🔍</div>
+                <div style="font-weight: 600; color: #0f172a; margin-bottom: 6px; font-size: 17px;">Sin resultados</div>
+                <div style="font-size: 14.5px;">No se encontraron maquetas que coincidan con "${escapeHtml(activeSearchQuery)}".</div>
               </div>
             ` : `
               <div class="cloud-grid">
@@ -1873,11 +1876,11 @@ export function initCloudUI() {
               <span class="cloud-search-icon">🔍</span>
               <input type="text" id="global-search-input" class="cloud-search-input" placeholder="Buscar maqueta por nombre o tema en todo el catálogo (${totalTemplates} plantillas)..." value="" />
             </div>
-            <div style="display: flex; gap: 10px; align-items: center;">
-              <span style="font-size: 12.5px; color: #64748b; font-weight: 500;">
+            <div style="display: flex; gap: 12px; align-items: center;">
+              <span style="font-size: 15px; color: #64748b; font-weight: 500;">
                 📚 <strong>${folders.length} secciones</strong> · <strong>${totalTemplates} maquetas</strong>
               </span>
-              <button id="btn-view-all-flat" class="cloud-btn cloud-btn-ghost" style="padding: 7px 14px; font-size: 12.5px;">
+              <button id="btn-view-all-flat" class="cloud-btn cloud-btn-ghost" style="padding: 9px 18px; font-size: 14.5px;">
                 📄 Ver Todas (${totalTemplates})
               </button>
             </div>
@@ -1921,7 +1924,7 @@ export function initCloudUI() {
                           </div>
                         `;
                       }).join('')}
-                      ${previews.length === 0 ? `<div style="font-size: 11px; color: #94a3b8; font-style: italic; padding-left: 4px;">Sin previsualizaciones aún</div>` : ''}
+                      ${previews.length === 0 ? `<div style="font-size: 13.5px; color: #94a3b8; font-style: italic; padding-left: 6px;">Sin previsualizaciones aún</div>` : ''}
                     </div>
 
                     <div class="cloud-folder-footer">
@@ -2442,18 +2445,18 @@ export function initCloudUI() {
         <div class="cloud-user-info">
           ${auth.user?.picture ? `<img src="${auth.user.picture}" />` : '👤'}
           <div>
-            <div style="font-weight: 600; color: #0f172a; font-size: 14px;">${auth.user?.name || 'Redactor'}</div>
-            <div style="font-size: 12px; color: #64748b;">${auth.user?.email || ''}</div>
+            <div style="font-weight: 700; color: #0f172a; font-size: 16.5px;">${auth.user?.name || 'Redactor'}</div>
+            <div style="font-size: 14px; color: #64748b;">${auth.user?.email || ''}</div>
           </div>
         </div>
-        <button class="cloud-btn cloud-btn-ghost" id="btn-cloud-logout" style="padding: 4px 10px; font-size: 12px;">
+        <button class="cloud-btn cloud-btn-ghost" id="btn-cloud-logout" style="padding: 7px 14px; font-size: 14px;">
           Cerrar Sesión
         </button>
       </div>
 
-      <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px;">
-        <h4 style="margin: 0 0 4px 0; font-size: 14px; color: #0f172a; font-weight: 700;">Destino de Publicación en Google Drive</h4>
-        <p style="margin: 0; font-size: 12.5px; color: #64748b;">Elige la fecha de la edición y la página donde se depositará el trabajo final.</p>
+      <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; padding: 18px 20px; border-radius: 12px;">
+        <h4 style="margin: 0 0 6px 0; font-size: 17px; color: #0f172a; font-weight: 700;">Destino de Publicación en Google Drive</h4>
+        <p style="margin: 0; font-size: 14.5px; color: #64748b;">Elige la fecha de la edición y la página donde se depositará el trabajo final.</p>
       </div>
 
       <div class="cloud-field">
@@ -2476,15 +2479,15 @@ export function initCloudUI() {
           <option value="x1a" selected>PDF/X-1a:2001 (Prensa / Rotativa — Acoplado estricto — Predeterminado)</option>
           <option value="x4">PDF/X-4:2010 (Moderno — Transparencias vivas)</option>
         </select>
-        <span style="font-size: 11px; color: #64748b; margin-top: 3px; display: block;">
+        <span style="font-size: 13.5px; color: #64748b; margin-top: 5px; display: block; line-height: 1.45;">
           PDF/X-1a es el estándar recomendado para periódicos: garantiza 100% CMYK y acopla transparencias para máxima compatibilidad con el RIP.
         </span>
       </div>
 
       <div id="cloud-action-status" style="display: none;" class="cloud-status-badge"></div>
 
-      <div style="display: flex; gap: 12px; margin-top: 8px;">
-        <button class="cloud-btn cloud-btn-success" id="btn-save-page" style="flex: 1;" disabled>
+      <div style="display: flex; gap: 14px; margin-top: 10px;">
+        <button class="cloud-btn cloud-btn-success" id="btn-save-page" style="flex: 1; padding: 14px 24px; font-size: 16.5px;" disabled>
           💾 Guardar Maqueta y PDF en Google Drive
         </button>
       </div>

@@ -500,12 +500,12 @@ pub fn doc_tabs(app: &mut DesignApp, ui: &mut egui::Ui) {
 pub fn status_bar(app: &mut DesignApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let resp = egui::Panel::bottom("status_bar")
-        .exact_size(17.0)
-        .frame(egui::Frame::NONE.fill(t.panel).inner_margin(egui::Margin::symmetric(8, 0)))
+        .exact_size(26.0)
+        .frame(egui::Frame::NONE.fill(t.panel).inner_margin(egui::Margin::symmetric(10, 3)))
         .show(ui, |ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.spacing_mut().item_spacing.x = 6.0;
             ui.horizontal_centered(|ui| {
-                let small = egui::FontId::proportional(10.5);
+                let small = egui::FontId::proportional(12.5);
                 if app.session.active().is_none() {
                     ui.label(egui::RichText::new(&app.ui.status).font(small).color(t.text_dim));
                     return;
@@ -522,17 +522,17 @@ pub fn status_bar(app: &mut DesignApp, ui: &mut egui::Ui) {
                 ui.add_space(8.0);
                 let n = app.session.active().map(|d| d.doc.page_count()).unwrap_or(1);
                 let cur = crate::canvas::current_page(app).unwrap_or(0);
-                if icons::button(ui, "first", 14.0, false, crate::i18n::tr(&app.ui.language, "First Spread")).clicked() {
+                if icons::button(ui, "first", 16.0, false, crate::i18n::tr(&app.ui.language, "First Spread")).clicked() {
                     crate::canvas::go_to_page(app, 0);
                 }
-                if icons::button(ui, "prev", 14.0, false, crate::i18n::tr(&app.ui.language, "Previous Spread")).clicked() {
+                if icons::button(ui, "prev", 16.0, false, crate::i18n::tr(&app.ui.language, "Previous Spread")).clicked() {
                     crate::canvas::go_to_page(app, cur.saturating_sub(1));
                 }
                 let name = app.session.page_label(cur);
-                let (fr, fresp) = ui.allocate_exact_size(vec2(80.0, 14.0), Sense::click());
-                ui.painter().rect(fr, 0.0, t.input, Stroke::new(1.0, t.field_border), egui::StrokeKind::Inside);
-                ui.painter().text(fr.left_center() + vec2(5.0, 0.0), egui::Align2::LEFT_CENTER, &name, small.clone(), t.text);
-                ui.painter().text(fr.right_center() - vec2(5.0, 0.0), egui::Align2::RIGHT_CENTER, "▾", small.clone(), t.text);
+                let (fr, fresp) = ui.allocate_exact_size(vec2(95.0, 18.0), Sense::click());
+                ui.painter().rect(fr, 2.0, t.input, Stroke::new(1.0, t.field_border), egui::StrokeKind::Inside);
+                ui.painter().text(fr.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, &name, small.clone(), t.text);
+                ui.painter().text(fr.right_center() - vec2(6.0, 0.0), egui::Align2::RIGHT_CENTER, "▾", small.clone(), t.text);
                 egui::Popup::menu(&fresp).show(|ui| {
                     let names: Vec<String> = (0..n).map(|i| app.session.page_label(i)).collect();
                     egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
@@ -544,10 +544,10 @@ pub fn status_bar(app: &mut DesignApp, ui: &mut egui::Ui) {
                         }
                     });
                 });
-                if icons::button(ui, "next", 14.0, false, crate::i18n::tr(&app.ui.language, "Next Spread")).clicked() {
+                if icons::button(ui, "next", 16.0, false, crate::i18n::tr(&app.ui.language, "Next Spread")).clicked() {
                     crate::canvas::go_to_page(app, (cur + 1).min(n - 1));
                 }
-                if icons::button(ui, "last", 14.0, false, crate::i18n::tr(&app.ui.language, "Last Spread")).clicked() {
+                if icons::button(ui, "last", 16.0, false, crate::i18n::tr(&app.ui.language, "Last Spread")).clicked() {
                     crate::canvas::go_to_page(app, n - 1);
                 }
                 ui.add_space(8.0);
@@ -595,10 +595,10 @@ pub fn status_bar(app: &mut DesignApp, ui: &mut egui::Ui) {
                 // Preflight: live issues check.
                 let issues = designcraft_engine::cmd::preflight::check(&app.session, 150.0);
                 let errors = issues.iter().filter(|i| i.severity == "error").count();
-                let (r, dot_resp) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::click());
+                let (r, dot_resp) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::click());
                 ui.painter().circle_filled(
                     r.center(),
-                    4.0,
+                    5.0,
                     if errors == 0 { Color32::from_rgb(60, 200, 90) } else { Color32::from_rgb(235, 50, 50) },
                 );
                 if dot_resp

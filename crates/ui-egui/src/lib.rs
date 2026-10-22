@@ -242,7 +242,7 @@ impl Default for UiState {
             separation: None,
             ink_limit: None,
             display_quality: designcraft_render::DisplayQuality::High,
-            ui_scale: 1.0,
+            ui_scale: 1.6,
             rich_black: false,
             overprint_preview: false,
             shortcuts: Default::default(),

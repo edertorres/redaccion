@@ -94,6 +94,8 @@ pub fn start() {
                         }
                         let inbox: Inbox = Inbox::default();
                         let mut app = DesignApp::new(Session::new(), services(inbox.clone(), cc.egui_ctx.clone(), active_doc_id.clone()));
+                        app.ui.ui_scale = 1.6;
+                        cc.egui_ctx.set_zoom_factor(1.6);
                         if is_editor {
                             app.session.restrict_to_editor();
                         }

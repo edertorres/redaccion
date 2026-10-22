@@ -1402,15 +1402,16 @@ pub fn show(app: &mut DesignApp, ctx: &egui::Context) {
     let is_style_dialog = d.id == "paragraphStyleOptions" || d.id == "characterStyleOptions";
     let is_overview = d.id == "editorialOverview";
     egui::Modal::new(egui::Id::new("dialog")).show(ctx, |ui| {
-        ui.set_min_width(if is_overview { 940.0 } else if is_style_dialog { 760.0 } else { 380.0 });
+        let max_w: f32 = (ctx.input(|i| i.raw.screen_rect.map(|r| r.width()).unwrap_or(1200.0)) - 32.0).max(300.0);
+        ui.set_min_width(if is_overview { 940.0_f32.min(max_w) } else if is_style_dialog { 760.0_f32.min(max_w) } else { 380.0_f32.min(max_w) });
         ui.set_max_width(if is_overview {
-            960.0
+            960.0_f32.min(max_w)
         } else if is_style_dialog {
-            780.0
+            780.0_f32.min(max_w)
         } else if d.id == "newDocument" && crate::i18n::is_rtl(&app.ui.language) {
-            380.0
+            380.0_f32.min(max_w)
         } else {
-            640.0
+            640.0_f32.min(max_w)
         });
         if crate::i18n::is_rtl(&app.ui.language) {
             ui.horizontal(|ui| {
