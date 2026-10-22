@@ -676,6 +676,7 @@ attr_set! {
         left_indent: Option<f64> = None,
         right_indent: Option<f64> = None,
         align: Option<Align> = None,
+        grid_align: Option<GridAlign> = None,
         keep_with_next: Option<u32> = None,
         hyphenate: Option<bool> = None,
         fill: String = "[Black]".into(),

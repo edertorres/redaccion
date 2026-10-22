@@ -488,6 +488,9 @@ fn apply_char_props_to_para(cp: &designcraft_doc::CharProps, pp: &mut designcraf
     if let Some(al) = cp.align {
         pp.align = al;
     }
+    if let Some(ga) = cp.grid_align {
+        pp.grid_align = ga;
+    }
     if let Some(kwn) = cp.keep_with_next {
         pp.keep_with_next = kwn;
     }
@@ -533,6 +536,9 @@ fn apply_character_spacing(doc: &Document, story: &Story, prange: std::ops::Rang
         }
         if let Some(Some(al)) = fmt.over.align {
             pp.align = al;
+        }
+        if let Some(Some(ga)) = fmt.over.grid_align {
+            pp.grid_align = ga;
         }
         if let Some(Some(kwn)) = fmt.over.keep_with_next {
             pp.keep_with_next = kwn;

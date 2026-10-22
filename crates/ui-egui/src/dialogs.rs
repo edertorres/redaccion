@@ -4554,6 +4554,34 @@ fn character_style_options(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
                         });
                         ui.end_row();
 
+                        crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, "Align to Grid:"));
+                        let cur_ga: Option<designcraft_doc::GridAlign> = serde_json::from_value(cur(d, "c.gridAlign", &cv["gridAlign"])).ok();
+                        let ga_text = cur_ga
+                            .map(|g| match g {
+                                designcraft_doc::GridAlign::None => crate::i18n::tr(&app.ui.language, "None"),
+                                designcraft_doc::GridAlign::AllLines => crate::i18n::tr(&app.ui.language, "All Lines"),
+                                designcraft_doc::GridAlign::FirstLineOnly => crate::i18n::tr(&app.ui.language, "First Line Only"),
+                            })
+                            .unwrap_or_else(|| crate::i18n::tr(&app.ui.language, "[Inherited]"));
+                        egui::ComboBox::from_id_salt("cs_grid_align").selected_text(crate::rtl::widget(ui, ga_text)).width(200.0).show_ui(ui, |ui| {
+                            if ui
+                                .selectable_label(cur_ga.is_none(), crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "[Inherited]")))
+                                .clicked()
+                            {
+                                d.fields.insert("c.gridAlign".into(), Value::Null);
+                            }
+                            for (v, lbl) in [
+                                (designcraft_doc::GridAlign::None, "None"),
+                                (designcraft_doc::GridAlign::AllLines, "All Lines"),
+                                (designcraft_doc::GridAlign::FirstLineOnly, "First Line Only"),
+                            ] {
+                                if ui.selectable_label(cur_ga == Some(v), crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, lbl))).clicked() {
+                                    d.fields.insert("c.gridAlign".into(), serde_json::to_value(v).unwrap_or_default());
+                                }
+                            }
+                        });
+                        ui.end_row();
+
                         for (label, key) in [
                             ("Left Indent:", "leftIndent"),
                             ("First Line Indent:", "firstLineIndent"),

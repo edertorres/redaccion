@@ -1386,6 +1386,81 @@ mod nested_style_tests {
 
         assert!((x0 - x1 - 20.0).abs() < 0.001, "firstLineIndent of 20pt must be cancelled to 0.0 by character style");
     }
+
+    #[test]
+    fn grep_style_space_before_on_second_paragraph() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({})).unwrap();
+        s.execute("style.character.create", &json!({"name": "CaptionStyle", "chars": {"spaceBefore": 20.0}})).unwrap();
+        let r = s
+            .execute(
+                "frame.create",
+                &json!({
+                    "rect": [72, 72, 400, 400],
+                    "content": "text",
+                    "text": "First paragraph\nFoto: Betancur"
+                }),
+            )
+            .unwrap();
+        let sid = r["story"].as_u64().unwrap();
+        let d0 = s.doc().unwrap().doc.clone();
+        let cs0 = designcraft_compose::compose_story(&d0, designcraft_doc::StoryId(sid), &Default::default());
+        let line0_p2 = cs0.frames[0].lines.iter().find(|l| l.para == 1).unwrap().baseline;
+
+        s.execute("text.select", &json!({"story": sid, "anchor": 0, "focus": 25})).unwrap();
+        s.execute(
+            "type.para",
+            &json!({"attrs": {
+                "grepStyles": [{"style": "CaptionStyle", "pattern": "Foto:.+"}]
+            }}),
+        )
+        .unwrap();
+
+        let d1 = s.doc().unwrap().doc.clone();
+        let cs1 = designcraft_compose::compose_story(&d1, designcraft_doc::StoryId(sid), &Default::default());
+        let line1_p2 = cs1.frames[0].lines.iter().find(|l| l.para == 1).unwrap().baseline;
+
+        assert!((line1_p2 - line0_p2 - 20.0).abs() < 0.001, "second paragraph must be pushed down by 20pt space_before");
+    }
+
+    #[test]
+    fn grep_style_space_before_with_baseline_grid() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({})).unwrap();
+        s.execute("style.character.create", &json!({"name": "CaptionStyle", "chars": {"spaceBefore": 6.0}})).unwrap();
+        let r = s
+            .execute(
+                "frame.create",
+                &json!({
+                    "rect": [72, 72, 400, 400],
+                    "content": "text",
+                    "text": "First paragraph\nFoto: Betancur"
+                }),
+            )
+            .unwrap();
+        let sid = r["story"].as_u64().unwrap();
+        let _fid = r["id"].as_u64().unwrap();
+
+        // Enable baseline grid on frame: start 72, increment 12
+        s.execute("text.select", &json!({"story": sid, "anchor": 0, "focus": 25})).unwrap();
+        s.execute(
+            "type.para",
+            &json!({"attrs": {
+                "gridAlign": "allLines",
+                "grepStyles": [{"style": "CaptionStyle", "pattern": "Foto:.+"}]
+            }}),
+        )
+        .unwrap();
+
+        let d1 = s.doc().unwrap().doc.clone();
+        let mut fspecs = designcraft_compose::frame_specs(&d1, designcraft_doc::StoryId(sid));
+        fspecs[0].grid = Some((72.0, 12.0));
+        let cs1 = designcraft_compose::compose(&d1, d1.story(designcraft_doc::StoryId(sid)).unwrap(), &fspecs, &Default::default());
+        let l0 = cs1.frames[0].lines.iter().find(|l| l.para == 0).unwrap().baseline;
+        let l1 = cs1.frames[0].lines.iter().find(|l| l.para == 1).unwrap().baseline;
+
+        assert!((l1 - l0 - 24.0).abs() < 0.001, "baseline grid must snap space_before up to grid increment");
+    }
 }
 
 #[cfg(test)]
