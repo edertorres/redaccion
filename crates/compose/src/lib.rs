@@ -469,19 +469,41 @@ pub fn compose(doc: &Document, story: &Story, frames: &[FrameSpec], opts: &Compo
     compose_with_db(doc, story, frames, opts, FontDb::global())
 }
 
-/// Apply paragraph space before/after overrides defined on character styles
+fn apply_char_props_to_para(cp: &designcraft_doc::CharProps, pp: &mut designcraft_doc::ParaProps) {
+    if let Some(sb) = cp.space_before {
+        pp.space_before = sb;
+    }
+    if let Some(sa) = cp.space_after {
+        pp.space_after = sa;
+    }
+    if let Some(fli) = cp.first_line_indent {
+        pp.first_line_indent = fli;
+    }
+    if let Some(li) = cp.left_indent {
+        pp.left_indent = li;
+    }
+    if let Some(ri) = cp.right_indent {
+        pp.right_indent = ri;
+    }
+    if let Some(al) = cp.align {
+        pp.align = al;
+    }
+    if let Some(kwn) = cp.keep_with_next {
+        pp.keep_with_next = kwn;
+    }
+    if let Some(hy) = cp.hyphenate {
+        pp.hyphenate = hy;
+    }
+}
+
+/// Apply paragraph space, indents, align and layout overrides defined on character styles
 /// (e.g. triggered via GREP styles or applied to character runs).
 fn apply_character_spacing(doc: &Document, story: &Story, prange: std::ops::Range<usize>, pp: &mut designcraft_doc::ParaProps) {
     if !pp.nested_styles.is_empty() || !pp.grep_styles.is_empty() {
         let ovs = crate::overlay::overlays(&story.text, prange.clone(), &pp.nested_styles, &pp.grep_styles);
         for (_, style_name) in ovs {
             let cp = doc.styles.resolve_char_style(&style_name);
-            if let Some(sb) = cp.space_before {
-                pp.space_before = sb;
-            }
-            if let Some(sa) = cp.space_after {
-                pp.space_after = sa;
-            }
+            apply_char_props_to_para(&cp, pp);
         }
     }
     for (rr, fmt) in story.runs() {
@@ -492,18 +514,31 @@ fn apply_character_spacing(doc: &Document, story: &Story, prange: std::ops::Rang
         }
         if !fmt.style.is_empty() {
             let cp = doc.styles.resolve_char_style(&fmt.style);
-            if let Some(sb) = cp.space_before {
-                pp.space_before = sb;
-            }
-            if let Some(sa) = cp.space_after {
-                pp.space_after = sa;
-            }
+            apply_char_props_to_para(&cp, pp);
         }
         if let Some(Some(sb)) = fmt.over.space_before {
             pp.space_before = sb;
         }
         if let Some(Some(sa)) = fmt.over.space_after {
             pp.space_after = sa;
+        }
+        if let Some(Some(fli)) = fmt.over.first_line_indent {
+            pp.first_line_indent = fli;
+        }
+        if let Some(Some(li)) = fmt.over.left_indent {
+            pp.left_indent = li;
+        }
+        if let Some(Some(ri)) = fmt.over.right_indent {
+            pp.right_indent = ri;
+        }
+        if let Some(Some(al)) = fmt.over.align {
+            pp.align = al;
+        }
+        if let Some(Some(kwn)) = fmt.over.keep_with_next {
+            pp.keep_with_next = kwn;
+        }
+        if let Some(Some(hy)) = fmt.over.hyphenate {
+            pp.hyphenate = hy;
         }
     }
 }

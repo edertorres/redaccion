@@ -4449,7 +4449,7 @@ fn character_style_options(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
         ("general", "General"),
         ("chars", "Basic Character Formats"),
         ("adv_chars", "Advanced Character Formats"),
-        ("spacing", "Paragraph Spacing"),
+        ("indents", "Indents and Spacing"),
         ("color", "Character Color"),
         ("opentype", "OpenType Features"),
         ("underline", "Underline Options"),
@@ -4528,10 +4528,39 @@ fn character_style_options(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
                 "adv_chars" => {
                     adv_char_formatting_section(app, ui, d, &cv, "cs");
                 }
-                "spacing" => {
+                "indents" => {
                     let units = st.doc.settings.horizontal_units;
-                    egui::Grid::new("cs_spacing_grid").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                        for (label, key) in [("Space Before:", "spaceBefore"), ("Space After:", "spaceAfter")] {
+                    egui::Grid::new("cs_indents_grid").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+                        crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, "Alignment:"));
+                        let cur_al: Option<designcraft_doc::Align> = serde_json::from_value(cur(d, "c.align", &cv["align"])).ok();
+                        let al_text = cur_al
+                            .map(|a| crate::i18n::tr(&app.ui.language, a.label()))
+                            .unwrap_or_else(|| crate::i18n::tr(&app.ui.language, "[Inherited]"));
+                        egui::ComboBox::from_id_salt("cs_align").selected_text(crate::rtl::widget(ui, al_text)).width(200.0).show_ui(ui, |ui| {
+                            if ui
+                                .selectable_label(cur_al.is_none(), crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "[Inherited]")))
+                                .clicked()
+                            {
+                                d.fields.insert("c.align".into(), Value::Null);
+                            }
+                            for al in designcraft_doc::Align::ALL {
+                                if ui
+                                    .selectable_label(cur_al == Some(al), crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, al.label())))
+                                    .clicked()
+                                {
+                                    d.fields.insert("c.align".into(), serde_json::to_value(al).unwrap_or_default());
+                                }
+                            }
+                        });
+                        ui.end_row();
+
+                        for (label, key) in [
+                            ("Left Indent:", "leftIndent"),
+                            ("First Line Indent:", "firstLineIndent"),
+                            ("Right Indent:", "rightIndent"),
+                            ("Space Before:", "spaceBefore"),
+                            ("Space After:", "spaceAfter"),
+                        ] {
                             crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, label));
                             let v = cur(d, &format!("c.{key}"), &cv[key]).as_f64();
                             if let Some(n) = crate::widgets::measure(ui, &format!("cs{key}"), v, units, 90.0) {
@@ -4539,6 +4568,21 @@ fn character_style_options(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
                             }
                             ui.end_row();
                         }
+
+                        crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, "Keep with Next:"));
+                        let mut kwn = cur(d, "c.keepWithNext", &cv["keepWithNext"]).as_u64().unwrap_or(0) as u32;
+                        if ui.add(egui::DragValue::new(&mut kwn).range(0..=5).suffix(" lines")).changed() {
+                            d.fields.insert("c.keepWithNext".into(), json!(kwn));
+                        }
+                        ui.end_row();
+
+                        crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, "Hyphenate:"));
+                        let cur_hyph = cur(d, "c.hyphenate", &cv["hyphenate"]);
+                        let mut hyph_checked = cur_hyph.as_bool().unwrap_or(true);
+                        if ui.checkbox(&mut hyph_checked, "").changed() {
+                            d.fields.insert("c.hyphenate".into(), json!(hyph_checked));
+                        }
+                        ui.end_row();
                     });
                 }
                 "opentype" => {
@@ -5447,7 +5491,7 @@ mod tests {
 
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx, "");
-        let sections = ["general", "chars", "adv_chars", "spacing", "color", "opentype", "underline", "strikethrough", "export", "copyfit"];
+        let sections = ["general", "chars", "adv_chars", "indents", "color", "opentype", "underline", "strikethrough", "export", "copyfit"];
 
         for sec in sections {
             let mut d = Dialog::new("characterStyleOptions", json!({"name": "TestChar"}));

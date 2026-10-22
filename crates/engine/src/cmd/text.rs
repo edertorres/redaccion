@@ -1340,6 +1340,52 @@ mod nested_style_tests {
 
         assert!((line1_p2 - line0_p2 - 30.0).abs() < 0.001, "short paragraph must push next para down by 30pt");
     }
+
+    #[test]
+    fn grep_style_overrides_parent_indent() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({})).unwrap();
+        s.execute("style.character.create", &json!({"name": "NoIndent", "chars": {"firstLineIndent": 0.0}})).unwrap();
+        let r = s
+            .execute(
+                "frame.create",
+                &json!({
+                    "rect": [72, 72, 400, 400],
+                    "content": "text",
+                    "text": "Foto: Betancur\nNormal body text with standard indentation"
+                }),
+            )
+            .unwrap();
+        let sid = r["story"].as_u64().unwrap();
+
+        s.execute("text.select", &json!({"story": sid, "anchor": 0, "focus": 3})).unwrap();
+        s.execute(
+            "type.para",
+            &json!({"attrs": {
+                "firstLineIndent": 20.0,
+            }}),
+        )
+        .unwrap();
+
+        let d0 = s.doc().unwrap().doc.clone();
+        let cs0 = designcraft_compose::compose_story(&d0, designcraft_doc::StoryId(sid), &Default::default());
+        let x0 = cs0.frames[0].lines[0].glyphs[0].x;
+
+        s.execute(
+            "type.para",
+            &json!({"attrs": {
+                "firstLineIndent": 20.0,
+                "grepStyles": [{"style": "NoIndent", "pattern": "Foto:.+"}]
+            }}),
+        )
+        .unwrap();
+
+        let d1 = s.doc().unwrap().doc.clone();
+        let cs1 = designcraft_compose::compose_story(&d1, designcraft_doc::StoryId(sid), &Default::default());
+        let x1 = cs1.frames[0].lines[0].glyphs[0].x;
+
+        assert!((x0 - x1 - 20.0).abs() < 0.001, "firstLineIndent of 20pt must be cancelled to 0.0 by character style");
+    }
 }
 
 #[cfg(test)]
