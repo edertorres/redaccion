@@ -1,0 +1,45 @@
+*~
+plan/
+/target
+/dist
+/corpus
+/log
+.DS_Store
+/.claude/
+/target-*/
+/craft-fonts/
+
+# Environment and sensitive secrets
+.env
+.env.*
+!.env.example
+
+# Local IDE and editor cache
+.dirac-cache/
+.vscode/
+.idea/
+
+# User working documents and daily newspaper editions
+/documents/
+
+# Temporary and backup files
+*.tmp*
+*.bak
+/foto.jpg
+
+# Cloud drive sync cache, downloaded templates and access tokens
+/templates/cloud/
+
+# Heavy user imported IDML files (>100MB exceeds GitHub limits) and test folders
+/templates/*.idml
+/templates/.*
+/templates/Links/
+/templates/Test/
+/templates/Document fonts/
+/templates/Mi Prueba.designcraft
+
+# Ignore user IDML thumbnail previews but keep core starter template previews
+/templates/*.png
+!/templates/columna_opinion.png
+!/templates/editorial_reportaje.png
+!/templates/revista_muestra.png

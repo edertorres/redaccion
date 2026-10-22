@@ -1,0 +1,441 @@
+%!Adobe-FontList 1.24
+%Locale:0xc0a
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:Type1
+FontName:MyriadPro-Light
+FamilyName:Myriad Pro
+StyleName:Light
+FullName:Myriad Pro Light
+MenuName:Myriad Pro Light
+StyleBits:0
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\Myriad Pro Light.otf
+DataFormat:sfntData
+UsesStandardEncoding:yes
+isCFF:yes
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:79308
+FileModTime:1580490219
+WeightClass:300
+WidthClass:5
+AngleClass:0
+NameArray:0,Mac,4,Myriad Pro Light
+NameArray:0,Win,1,Myriad Pro Light
+NameArray:0,Win,16,Myriad Pro
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:Type1
+FontName:MyriadPro-Bold
+FamilyName:Myriad Pro
+StyleName:Bold
+FullName:Myriad Pro Bold
+MenuName:Myriad Pro
+StyleBits:2
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\MyriadPro-Bold.otf
+DataFormat:sfntData
+UsesStandardEncoding:yes
+isCFF:yes
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:95684
+FileModTime:1265312834
+WeightClass:700
+WidthClass:5
+AngleClass:0
+DesignSize:110
+NameArray:0,Mac,4,Myriad Pro Bold
+NameArray:0,Win,1,Myriad Pro
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:Type1
+FontName:MyriadPro-BoldCond
+FamilyName:Myriad Pro
+StyleName:Bold Condensed
+FullName:Myriad Pro Bold Condensed
+MenuName:Myriad Pro Cond
+StyleBits:2
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\MyriadPro-BoldCond.otf
+DataFormat:sfntData
+UsesStandardEncoding:yes
+isCFF:yes
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:94628
+FileModTime:1265312834
+WeightClass:700
+WidthClass:3
+AngleClass:0
+DesignSize:110
+NameArray:0,Mac,18,Myriad Pro Bold Cond
+NameArray:0,Mac,4,Myriad Pro Bold Condensed
+NameArray:0,Win,1,Myriad Pro Cond
+NameArray:0,Win,16,Myriad Pro
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:Type1
+FontName:MyriadPro-Semibold
+FamilyName:Myriad Pro
+StyleName:Semibold
+FullName:Myriad Pro Semibold
+MenuName:Myriad Pro Light
+StyleBits:2
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\MyriadPro-Semibold.otf
+DataFormat:sfntData
+UsesStandardEncoding:yes
+isCFF:yes
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:95616
+FileModTime:1265312834
+WeightClass:600
+WidthClass:5
+AngleClass:0
+DesignSize:110
+NameArray:0,Mac,4,Myriad Pro Semibold
+NameArray:0,Win,1,Myriad Pro Light
+NameArray:0,Win,16,Myriad Pro
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:Type1
+FontName:MyriadPro-SemiboldIt
+FamilyName:Myriad Pro
+StyleName:Semibold Italic
+FullName:Myriad Pro Semibold Italic
+MenuName:Myriad Pro Light
+StyleBits:3
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\MyriadPro-SemiboldIt.otf
+DataFormat:sfntData
+UsesStandardEncoding:yes
+isCFF:yes
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:100184
+FileModTime:1265312834
+WeightClass:600
+WidthClass:5
+AngleClass:1
+DesignSize:110
+NameArray:0,Mac,18,Myriad Pro Semibold It
+NameArray:0,Mac,4,Myriad Pro Semibold Italic
+NameArray:0,Win,1,Myriad Pro Light
+NameArray:0,Win,16,Myriad Pro
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:TrueType
+FontName:PlayfairDisplay-Black
+FamilyName:Playfair Display
+StyleName:Black
+FullName:Playfair Display Black
+MenuName:Playfair Display Black
+StyleBits:0
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\PlayfairDisplay-Black.ttf
+DataFormat:sfntData
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:193036
+FileModTime:1667359054
+WeightClass:900
+WidthClass:5
+AngleClass:0
+NameArray:0,Win,1,Playfair Display Black
+NameArray:0,Win,16,Playfair Display
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:TrueType
+FontName:PlayfairDisplay-BlackItalic
+FamilyName:Playfair Display
+StyleName:Black Italic
+FullName:Playfair Display Black Italic
+MenuName:Playfair Display Black
+StyleBits:1
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\PlayfairDisplay-BlackItalic.ttf
+DataFormat:sfntData
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:177144
+FileModTime:1667359054
+WeightClass:900
+WidthClass:5
+AngleClass:1
+NameArray:0,Win,1,Playfair Display Black
+NameArray:0,Win,16,Playfair Display
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:TrueType
+FontName:PlayfairDisplay-Bold
+FamilyName:Playfair Display
+StyleName:Bold
+FullName:Playfair Display Bold
+MenuName:Playfair Display
+StyleBits:2
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\PlayfairDisplay-Bold.ttf
+DataFormat:sfntData
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:193136
+FileModTime:1667359054
+WeightClass:700
+WidthClass:5
+AngleClass:0
+NameArray:0,Win,1,Playfair Display
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:TrueType
+FontName:PlayfairDisplay-ExtraBold
+FamilyName:Playfair Display
+StyleName:ExtraBold
+FullName:Playfair Display ExtraBold
+MenuName:Playfair Display ExtraBold
+StyleBits:0
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\PlayfairDisplay-ExtraBold.ttf
+DataFormat:sfntData
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:193128
+FileModTime:1747670092
+WeightClass:800
+WidthClass:5
+AngleClass:0
+NameArray:0,Win,1,Playfair Display ExtraBold
+NameArray:0,Win,16,Playfair Display
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:TrueType
+FontName:PlayfairDisplay-Medium
+FamilyName:Playfair Display
+StyleName:Medium
+FullName:Playfair Display Medium
+MenuName:Playfair Display Medium
+StyleBits:0
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\PlayfairDisplay-Medium.ttf
+DataFormat:sfntData
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:193220
+FileModTime:1667359054
+WeightClass:500
+WidthClass:5
+AngleClass:0
+NameArray:0,Win,1,Playfair Display Medium
+NameArray:0,Win,16,Playfair Display
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:TrueType
+FontName:PlayfairDisplay-Regular
+FamilyName:Playfair Display
+StyleName:Regular
+FullName:Playfair Display
+MenuName:Playfair Display
+StyleBits:0
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\PlayfairDisplay-Regular.ttf
+DataFormat:sfntData
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:186856
+FileModTime:1390882820
+WeightClass:400
+WidthClass:5
+AngleClass:0
+NameArray:0,Mac,18,Playfair Display Regular
+NameArray:0,Mac,4,Playfair Display
+NameArray:0,Win,1,Playfair Display
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:TrueType
+FontName:PlayfairDisplay-SemiBold
+FamilyName:Playfair Display
+StyleName:SemiBold
+FullName:Playfair Display SemiBold
+MenuName:Playfair Display SemiBold
+StyleBits:0
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\PlayfairDisplay-SemiBold.ttf
+DataFormat:sfntData
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:193272
+FileModTime:1667359054
+WeightClass:600
+WidthClass:5
+AngleClass:0
+NameArray:0,Win,1,Playfair Display SemiBold
+NameArray:0,Win,16,Playfair Display
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:Type1
+FontName:Utopia-Bold
+FamilyName:Utopia
+StyleName:Bold
+FullName:Utopia Bold
+MenuName:Utopia
+StyleBits:2
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\Utopia Bold.otf
+DataFormat:sfntData
+UsesStandardEncoding:yes
+isCFF:yes
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:24020
+FileModTime:1421702455
+WeightClass:700
+WidthClass:5
+AngleClass:0
+NameArray:0,Mac,4,Utopia Bold
+NameArray:0,Win,1,Utopia
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:Type1
+FontName:Utopia-Regular
+FamilyName:Utopia
+StyleName:Regular
+FullName:Utopia Regular
+MenuName:Utopia
+StyleBits:0
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\Utopia Regular.otf
+DataFormat:sfntData
+UsesStandardEncoding:yes
+isCFF:yes
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:23820
+FileModTime:1421702455
+WeightClass:400
+WidthClass:5
+AngleClass:0
+NameArray:0,Mac,4,Utopia Regular
+NameArray:0,Win,1,Utopia
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:Type1
+FontName:Vitesse-Light
+FamilyName:Vitesse
+StyleName:Light
+FullName:Vitesse Light
+MenuName:Vitesse Light
+StyleBits:0
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\Vitesse-Light.otf
+DataFormat:sfntData
+UsesStandardEncoding:yes
+isCFF:yes
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:86692
+FileModTime:1394160556
+WeightClass:300
+WidthClass:5
+AngleClass:0
+NameArray:0,Mac,4,Vitesse Light
+NameArray:0,Win,1,Vitesse Light
+NameArray:0,Win,16,Vitesse
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:TrueType
+FontName:ZapfDingbatsITCbyBT-Regular
+FamilyName:ZapfDingbats BT
+StyleName:Regular
+FullName:Zapf Dingbats BT
+MenuName:ZapfDingbats BT
+StyleBits:0
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\Zapf Dingbats BT.ttf
+DataFormat:sfntData
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:63532
+FileModTime:1741723656
+WeightClass:400
+WidthClass:5
+AngleClass:0
+NameArray:0,Mac,4,Zapf Dingbats BT
+NameArray:0,Win,1,ZapfDingbats BT
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:Type1
+FontName:Klavika-Bold
+FamilyName:Klavika
+StyleName:Bold
+FullName:Klavika Bold
+MenuName:Klavika Bd
+StyleBits:2
+WritingScript:Roman
+OutlineFileName:C:\Users\ARTES1\Desktop\1 GUILLERMO\PLANTILLAS 2025\Carpeta PLANTILLA 1\Document fonts\klavika-bold.otf
+DataFormat:sfntData
+UsesStandardEncoding:yes
+isCFF:yes
+hasSVG:no
+hasCOLR:no
+VariableFontType:NonVariableFont
+FileLength:70716
+FileModTime:1558625882
+WeightClass:700
+WidthClass:5
+AngleClass:0
+NameArray:0,Mac,4,Klavika Bold
+NameArray:0,Win,1,Klavika Bd
+NameArray:0,Win,16,Klavika
+%EndFont
+
