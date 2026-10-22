@@ -93,6 +93,9 @@ RUN mkdir -p /app/documents /app/templates/cloud
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
+# Declarar volúmenes persistentes para salvaguardar documentos y plantillas
+VOLUME ["/app/documents", "/app/templates"]
+
 # Puerto de servicio
 EXPOSE 8767
 
