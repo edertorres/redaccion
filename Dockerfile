@@ -10,13 +10,12 @@ FROM rust:bookworm AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Dependencias para compilación nativa y optimización wasm (wasm-opt vía binaryen)
+# Dependencias para compilación nativa
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     pkg-config \
     libssl-dev \
-    binaryen \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar target WebAssembly

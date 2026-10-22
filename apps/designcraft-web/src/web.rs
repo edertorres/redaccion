@@ -54,7 +54,11 @@ pub fn start() {
             return;
         };
         let mut options = eframe::WebOptions::default();
-        if query().contains("webgl")
+        let has_webgpu = web_sys::window()
+            .and_then(|w| js_sys::Reflect::get(&w.navigator(), &wasm_bindgen::JsValue::from_str("gpu")).ok())
+            .is_some_and(|v| !v.is_undefined() && !v.is_null());
+
+        if (!has_webgpu || query().contains("webgl"))
             && let eframe::egui_wgpu::WgpuSetup::CreateNew(create) = &mut options.wgpu_options.wgpu_setup
         {
             create.instance_descriptor.backends = eframe::wgpu::Backends::GL;
