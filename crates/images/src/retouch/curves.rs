@@ -3,8 +3,8 @@
 //! Maps digital sRGB ranges into the usable physical window of newsprint (4% highlight to 86% shadow)
 //! and compensates for coldset press dot-gain (TVI ~28%) via adaptive midtone expansion.
 
-use image::RgbaImage;
 use super::histogram::PhotoHistogram;
+use image::RgbaImage;
 
 /// A 256-entry tonal lookup table (LUT) mapping input byte $0..=255 \to 0..=255$.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,9 +91,7 @@ impl ToneCurve {
                 // Dark photo: anchor shadow gently
                 (hist.p1.min(15), hist.p99.max(240))
             }
-            super::histogram::SceneType::Overexposed => {
-                (hist.p1.min(15), hist.p99)
-            }
+            super::histogram::SceneType::Overexposed => (hist.p1.min(15), hist.p99),
             _ => {
                 // Normal & HighContrast: preserve the photographer's natural lighting!
                 // Only trim if there is clear dead space

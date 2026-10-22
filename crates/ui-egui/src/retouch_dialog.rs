@@ -7,16 +7,13 @@
 //! - Emits live progress events across all 5 phases with animated ProgressBar.
 //! - Commits document assets atomically with full Undo/Redo (Ctrl+Z) support.
 
-use std::sync::Arc;
 use serde_json::{Value, json};
+use std::sync::Arc;
 
 use designcraft_doc::{Asset, AssetId, Content, ItemId};
 use designcraft_images::{
-    PhotoHistogram, RotaryPreset,
-    apply_tone_curve, apply_unsharp_mask,
-    decode_rgba, encode_cmyk_tiff, encode_png,
-    measure_tac, separate_to_rotary_cmyk,
-    ToneCurve,
+    PhotoHistogram, RotaryPreset, ToneCurve, apply_tone_curve, apply_unsharp_mask, decode_rgba, encode_cmyk_tiff, encode_png, measure_tac,
+    separate_to_rotary_cmyk,
 };
 
 use crate::DesignApp;
@@ -81,7 +78,8 @@ pub fn start_retouch(app: &mut DesignApp, params: &Value) -> Option<Result<Value
     let preset = parse_preset(params.get("preset").and_then(Value::as_str));
     let to_cmyk = !matches!(params.get("format").and_then(Value::as_str).unwrap_or("cmyk"), "rgba" | "png" | "rgb");
     let clean = params.get("clean").and_then(Value::as_bool).unwrap_or(false);
-    let auto_levels = if clean { false } else { params.get("autoLevels").or_else(|| params.get("auto_levels")).and_then(Value::as_bool).unwrap_or(true) };
+    let auto_levels =
+        if clean { false } else { params.get("autoLevels").or_else(|| params.get("auto_levels")).and_then(Value::as_bool).unwrap_or(true) };
     let sharpen = if clean { false } else { params.get("sharpen").and_then(Value::as_bool).unwrap_or(true) };
 
     let st = match app.session.active() {
@@ -117,18 +115,10 @@ pub fn start_retouch(app: &mut DesignApp, params: &Value) -> Option<Result<Value
         return Some(Err(format!("El archivo {} es un gráfico vectorial; el retoque AIE se aplica a fotos rasterizadas", asset.name)));
     }
 
-    let stem = std::path::Path::new(&asset.name)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("foto")
-        .to_string();
+    let stem = std::path::Path::new(&asset.name).file_stem().and_then(|s| s.to_str()).unwrap_or("foto").to_string();
 
     let now = crate::now_ms();
-    let title = if clean {
-        format!("Separación CMYK Pura: {}", asset.name)
-    } else {
-        format!("Retoque para Rotativa: {}", asset.name)
-    };
+    let title = if clean { format!("Separación CMYK Pura: {}", asset.name) } else { format!("Retoque para Rotativa: {}", asset.name) };
 
     app.retouch_progress = Some(RetouchProgressState {
         title,
@@ -206,7 +196,9 @@ pub fn drain_retouch(app: &mut DesignApp, ctx: &egui::Context) {
         }
         2 => {
             // Step 2: PhotoHistogram
-            let Some(ref rgba) = task.rgba else { return; };
+            let Some(ref rgba) = task.rgba else {
+                return;
+            };
             let hist = PhotoHistogram::from_rgba8(rgba);
             task.hist = Some(hist);
             task.step = 3;
@@ -220,7 +212,9 @@ pub fn drain_retouch(app: &mut DesignApp, ctx: &egui::Context) {
         }
         3 => {
             // Step 3: Tone reproduction curve (auto-levels + dot-gain compensation)
-            let (Some(hist), Some(rgba)) = (&task.hist, &mut task.rgba) else { return; };
+            let (Some(hist), Some(rgba)) = (&task.hist, &mut task.rgba) else {
+                return;
+            };
             if task.auto_levels {
                 let curve = ToneCurve::auto_levels_for_rotary(
                     hist,
@@ -247,7 +241,9 @@ pub fn drain_retouch(app: &mut DesignApp, ctx: &egui::Context) {
         }
         4 => {
             // Step 4: Unsharp masking
-            let Some(ref mut rgba) = task.rgba else { return; };
+            let Some(ref mut rgba) = task.rgba else {
+                return;
+            };
             if task.sharpen {
                 let usm = task.preset.unsharp_params();
                 apply_unsharp_mask(rgba, &usm);
@@ -267,7 +263,9 @@ pub fn drain_retouch(app: &mut DesignApp, ctx: &egui::Context) {
         }
         5 => {
             // Step 5: CMYK Separation / PNG Encoding and Commit Document
-            let Some(ref rgba) = task.rgba else { return; };
+            let Some(ref rgba) = task.rgba else {
+                return;
+            };
             let (w, h) = rgba.dimensions();
 
             let (asset_bytes, tac_info) = if task.to_cmyk {
@@ -299,11 +297,7 @@ pub fn drain_retouch(app: &mut DesignApp, ctx: &egui::Context) {
             };
 
             let (ext, mime) = if task.to_cmyk { ("tif", "image/tiff") } else { ("png", "image/png") };
-            let new_name = if task.to_cmyk {
-                format!("{}_rotary_cmyk.{ext}", task.stem)
-            } else {
-                format!("{}_rotary.{ext}", task.stem)
-            };
+            let new_name = if task.to_cmyk { format!("{}_rotary_cmyk.{ext}", task.stem) } else { format!("{}_rotary.{ext}", task.stem) };
 
             // Atomically update document item and asset store with Undo/Redo
             let edit_result = app.session.edit(|d, _sel| {
@@ -326,11 +320,7 @@ pub fn drain_retouch(app: &mut DesignApp, ctx: &egui::Context) {
                 Ok(aid)
             });
 
-            let total_ms = if let Some(ref p) = app.retouch_progress {
-                crate::now_ms() - p.start_time
-            } else {
-                0.0
-            };
+            let total_ms = if let Some(ref p) = app.retouch_progress { crate::now_ms() - p.start_time } else { 0.0 };
 
             if let Some(ref mut p) = app.retouch_progress {
                 p.progress = 1.0;
@@ -397,12 +387,7 @@ pub fn show(app: &mut DesignApp, ctx: &egui::Context) {
             egui::Color32::from_rgb(33, 150, 243) // Blue
         };
 
-        ui.add(
-            egui::ProgressBar::new(prog.progress)
-                .show_percentage()
-                .animate(!prog.done)
-                .fill(bar_color)
-        );
+        ui.add(egui::ProgressBar::new(prog.progress).show_percentage().animate(!prog.done).fill(bar_color));
 
         ui.add_space(8.0);
 
@@ -410,11 +395,8 @@ pub fn show(app: &mut DesignApp, ctx: &egui::Context) {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(&prog.stage_name).font(semibold(12.0)).color(t.text));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let time_str = if prog.elapsed_ms >= 1000.0 {
-                    format!("{:.2} s", prog.elapsed_ms / 1000.0)
-                } else {
-                    format!("{:.0} ms", prog.elapsed_ms)
-                };
+                let time_str =
+                    if prog.elapsed_ms >= 1000.0 { format!("{:.2} s", prog.elapsed_ms / 1000.0) } else { format!("{:.0} ms", prog.elapsed_ms) };
                 ui.label(egui::RichText::new(format!("⏱ {time_str}")).font(egui::FontId::proportional(11.0)).color(t.text_dim));
             });
         });
@@ -430,52 +412,50 @@ pub fn show(app: &mut DesignApp, ctx: &egui::Context) {
             ("Separación CMYK y control de TAC ≤ 220%", 5),
         ];
 
-        egui::Frame::group(ui.style())
-            .fill(t.input)
-            .inner_margin(egui::Margin::same(8))
-            .show(ui, |ui| {
-                for (name, idx) in stages {
-                    ui.horizontal(|ui| {
-                        let (icon, color) = if prog.stage_index > idx || (prog.done && prog.error.is_none()) {
-                            ("✓", egui::Color32::from_rgb(46, 160, 67))
-                        } else if prog.stage_index == idx && !prog.done {
-                            ("▶", egui::Color32::from_rgb(33, 150, 243))
-                        } else {
-                            ("○", t.text_dim)
-                        };
-                        ui.label(egui::RichText::new(icon).color(color).font(semibold(12.0)));
-                        ui.label(egui::RichText::new(name).font(egui::FontId::proportional(11.5)).color(if prog.stage_index == idx { t.text } else { t.text_dim }));
-                    });
-                }
-            });
+        egui::Frame::group(ui.style()).fill(t.input).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
+            for (name, idx) in stages {
+                ui.horizontal(|ui| {
+                    let (icon, color) = if prog.stage_index > idx || (prog.done && prog.error.is_none()) {
+                        ("✓", egui::Color32::from_rgb(46, 160, 67))
+                    } else if prog.stage_index == idx && !prog.done {
+                        ("▶", egui::Color32::from_rgb(33, 150, 243))
+                    } else {
+                        ("○", t.text_dim)
+                    };
+                    ui.label(egui::RichText::new(icon).color(color).font(semibold(12.0)));
+                    ui.label(egui::RichText::new(name).font(egui::FontId::proportional(11.5)).color(if prog.stage_index == idx {
+                        t.text
+                    } else {
+                        t.text_dim
+                    }));
+                });
+            }
+        });
 
         // Results Card when done
         if let Some(ref st) = prog.stats {
             ui.add_space(8.0);
-            egui::Frame::group(ui.style())
-                .fill(t.panel)
-                .inner_margin(egui::Margin::same(8))
-                .show(ui, |ui| {
-                    ui.label(egui::RichText::new("📊 Resumen de Calidad para Prensa:").font(semibold(12.0)));
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("• Cobertura Máx (TAC):").font(egui::FontId::proportional(11.0)).color(t.text_dim));
-                        let tac_ok = st.max_tac <= 220.5;
-                        let tac_color = if tac_ok { egui::Color32::from_rgb(46, 160, 67) } else { egui::Color32::from_rgb(235, 50, 50) };
-                        ui.label(egui::RichText::new(format!("{:.1}% (Norma ≤ 220%)", st.max_tac)).color(tac_color).font(semibold(11.0)));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("• Escena detectada:").font(egui::FontId::proportional(11.0)).color(t.text_dim));
-                        ui.label(egui::RichText::new(&st.scene).font(semibold(11.0)));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("• Dimensiones:").font(egui::FontId::proportional(11.0)).color(t.text_dim));
-                        ui.label(egui::RichText::new(format!("{} × {} px", st.width, st.height)).font(egui::FontId::proportional(11.0)));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("• Formato generado:").font(egui::FontId::proportional(11.0)).color(t.text_dim));
-                        ui.label(egui::RichText::new(if st.is_cmyk { "TIFF CMYK Prensa" } else { "PNG RGBA" }).font(egui::FontId::proportional(11.0)));
-                    });
+            egui::Frame::group(ui.style()).fill(t.panel).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
+                ui.label(egui::RichText::new("📊 Resumen de Calidad para Prensa:").font(semibold(12.0)));
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("• Cobertura Máx (TAC):").font(egui::FontId::proportional(11.0)).color(t.text_dim));
+                    let tac_ok = st.max_tac <= 220.5;
+                    let tac_color = if tac_ok { egui::Color32::from_rgb(46, 160, 67) } else { egui::Color32::from_rgb(235, 50, 50) };
+                    ui.label(egui::RichText::new(format!("{:.1}% (Norma ≤ 220%)", st.max_tac)).color(tac_color).font(semibold(11.0)));
                 });
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("• Escena detectada:").font(egui::FontId::proportional(11.0)).color(t.text_dim));
+                    ui.label(egui::RichText::new(&st.scene).font(semibold(11.0)));
+                });
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("• Dimensiones:").font(egui::FontId::proportional(11.0)).color(t.text_dim));
+                    ui.label(egui::RichText::new(format!("{} × {} px", st.width, st.height)).font(egui::FontId::proportional(11.0)));
+                });
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("• Formato generado:").font(egui::FontId::proportional(11.0)).color(t.text_dim));
+                    ui.label(egui::RichText::new(if st.is_cmyk { "TIFF CMYK Prensa" } else { "PNG RGBA" }).font(egui::FontId::proportional(11.0)));
+                });
+            });
         }
 
         // Action Buttons
@@ -488,7 +468,9 @@ pub fn show(app: &mut DesignApp, ctx: &egui::Context) {
                     }
                 });
             } else {
-                ui.label(egui::RichText::new("Procesando paso a paso sin congelar la UI...").font(egui::FontId::proportional(11.0)).color(t.text_dim));
+                ui.label(
+                    egui::RichText::new("Procesando paso a paso sin congelar la UI...").font(egui::FontId::proportional(11.0)).color(t.text_dim),
+                );
             }
         });
     });
@@ -530,12 +512,7 @@ pub fn status_indicator(app: &DesignApp, ui: &mut egui::Ui) {
 
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new(format!("🛠 Retoque: {}", prog.stage_name)).font(small.clone()).color(color));
-        ui.add(
-            egui::ProgressBar::new(prog.progress)
-                .desired_width(80.0)
-                .show_percentage()
-                .fill(color),
-        );
+        ui.add(egui::ProgressBar::new(prog.progress).desired_width(80.0).show_percentage().fill(color));
     })
     .response
     .on_hover_text(tooltip);
@@ -586,13 +563,18 @@ mod tests {
         session.execute("file.new", &json!({})).unwrap();
 
         let png = make_test_photo();
-        let placed = session.execute("file.place", &json!({
-            "base64": base64_encode(&png),
-            "name": "editorial_test.png",
-            "x": 50,
-            "y": 50,
-            "width": 100,
-        })).unwrap();
+        let placed = session
+            .execute(
+                "file.place",
+                &json!({
+                    "base64": base64_encode(&png),
+                    "name": "editorial_test.png",
+                    "x": 50,
+                    "y": 50,
+                    "width": 100,
+                }),
+            )
+            .unwrap();
 
         let item_id = placed["id"].as_u64().unwrap();
 

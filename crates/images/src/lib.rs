@@ -7,19 +7,18 @@
 
 use std::sync::{Arc, OnceLock};
 
-pub use resvg::usvg;
 pub use image;
+pub use resvg::usvg;
 
 mod eps;
 mod psd;
 pub mod retouch;
 pub use eps::{bounding_box as eps_bounding_box, eps_proxy, is_eps};
 pub use retouch::{
-    PhotoHistogram, RetouchOptions, RetouchReport, RotaryPreset, SceneType, TacMetrics, ToneCurve, UnsharpParams, apply_tone_curve, apply_unsharp_mask,
-    cmyk_raster_to_display_rgba, measure_tac, optimize_for_rotary_press, optimize_for_rotary_press_in_place, optimize_for_rotary_press_with_options,
-    separate_to_cmyk_with_profile, separate_to_rotary_cmyk, soft_proof_cmyk_to_srgb,
+    PhotoHistogram, RetouchOptions, RetouchReport, RotaryPreset, SceneType, TacMetrics, ToneCurve, UnsharpParams, apply_tone_curve,
+    apply_unsharp_mask, cmyk_raster_to_display_rgba, measure_tac, optimize_for_rotary_press, optimize_for_rotary_press_in_place,
+    optimize_for_rotary_press_with_options, separate_to_cmyk_with_profile, separate_to_rotary_cmyk, soft_proof_cmyk_to_srgb,
 };
-
 
 /// Encode an RGBA image as PNG bytes.
 pub fn encode_png(img: &image::RgbaImage) -> Result<Vec<u8>, String> {
@@ -348,10 +347,10 @@ mod tests {
             width: 2,
             height: 2,
             cmyk: vec![
-                255, 0, 0, 0,   // Cyan
-                0, 255, 0, 0,   // Magenta
-                0, 0, 255, 0,   // Yellow
-                0, 0, 0, 255,   // Black
+                255, 0, 0, 0, // Cyan
+                0, 255, 0, 0, // Magenta
+                0, 0, 255, 0, // Yellow
+                0, 0, 0, 255, // Black
             ],
             alpha: Some(vec![255, 255, 200, 150]),
         };

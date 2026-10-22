@@ -88,7 +88,8 @@ impl PhotoHistogram {
             let b = pixel[2];
 
             // Rec.709 integer approximation: (2126 * R + 7152 * G + 722 * B + 5000) / 10000
-            let y = ((2126u32.saturating_mul(u32::from(r))
+            let y = ((2126u32
+                .saturating_mul(u32::from(r))
                 .saturating_add(7152u32.saturating_mul(u32::from(g)))
                 .saturating_add(722u32.saturating_mul(u32::from(b)))
                 .saturating_add(5000))

@@ -12,8 +12,7 @@ pub mod histogram;
 pub mod sharpen;
 
 pub use cmyk::{
-    TacMetrics, cmyk_raster_to_display_rgba, measure_tac, separate_to_cmyk_with_profile, separate_to_rotary_cmyk,
-    soft_proof_cmyk_to_srgb,
+    TacMetrics, cmyk_raster_to_display_rgba, measure_tac, separate_to_cmyk_with_profile, separate_to_rotary_cmyk, soft_proof_cmyk_to_srgb,
 };
 pub use curves::{ToneCurve, apply_tone_curve};
 pub use histogram::{PhotoHistogram, SceneType};
@@ -59,7 +58,7 @@ impl RotaryPreset {
     /// Midtone gamma adjustment without double TVI compensation.
     pub fn midtone_gamma(&self) -> f32 {
         match self {
-            Self::ColdsetNewspaper => 1.03,  // Crisp natural midtone clarity
+            Self::ColdsetNewspaper => 1.03, // Crisp natural midtone clarity
             Self::ImprovedNewspaperSC => 1.02,
             Self::HeatsetMagazine => 1.01,
             Self::CommercialSheetfed => 1.0,
@@ -79,26 +78,10 @@ impl RotaryPreset {
     /// Calibrated unsharp mask parameters: subtle print crispness without halo ringing or harsh cutouts.
     pub fn unsharp_params(&self) -> UnsharpParams {
         match self {
-            Self::ColdsetNewspaper => UnsharpParams {
-                radius: 0.8,
-                amount: 0.40,
-                threshold: 6,
-            },
-            Self::ImprovedNewspaperSC => UnsharpParams {
-                radius: 0.7,
-                amount: 0.35,
-                threshold: 5,
-            },
-            Self::HeatsetMagazine => UnsharpParams {
-                radius: 0.6,
-                amount: 0.30,
-                threshold: 4,
-            },
-            Self::CommercialSheetfed => UnsharpParams {
-                radius: 0.5,
-                amount: 0.25,
-                threshold: 3,
-            },
+            Self::ColdsetNewspaper => UnsharpParams { radius: 0.8, amount: 0.40, threshold: 6 },
+            Self::ImprovedNewspaperSC => UnsharpParams { radius: 0.7, amount: 0.35, threshold: 5 },
+            Self::HeatsetMagazine => UnsharpParams { radius: 0.6, amount: 0.30, threshold: 4 },
+            Self::CommercialSheetfed => UnsharpParams { radius: 0.5, amount: 0.25, threshold: 3 },
         }
     }
 }
@@ -131,42 +114,25 @@ pub struct RetouchOptions {
 
 impl Default for RetouchOptions {
     fn default() -> Self {
-        Self {
-            auto_levels: true,
-            sharpen: true,
-            custom_sharpen: None,
-        }
+        Self { auto_levels: true, sharpen: true, custom_sharpen: None }
     }
 }
 
 impl RetouchOptions {
     /// Pure color management separation without modifying the photo's pixels (no curves, no sharpening).
     pub fn clean() -> Self {
-        Self {
-            auto_levels: false,
-            sharpen: false,
-            custom_sharpen: None,
-        }
+        Self { auto_levels: false, sharpen: false, custom_sharpen: None }
     }
 }
 
 /// Optimize an RGBA image in place with full control over auto-levels and sharpening.
-pub fn optimize_for_rotary_press_with_options(
-    img: &mut RgbaImage,
-    preset: RotaryPreset,
-    opts: &RetouchOptions,
-) -> RetouchReport {
+pub fn optimize_for_rotary_press_with_options(img: &mut RgbaImage, preset: RotaryPreset, opts: &RetouchOptions) -> RetouchReport {
     let start = Instant::now();
 
     let hist = PhotoHistogram::from_rgba8(img);
 
     let curve = if opts.auto_levels {
-        let c = ToneCurve::auto_levels_for_rotary(
-            &hist,
-            preset.target_highlight_ink(),
-            preset.target_shadow_ink(),
-            preset.midtone_gamma(),
-        );
+        let c = ToneCurve::auto_levels_for_rotary(&hist, preset.target_highlight_ink(), preset.target_shadow_ink(), preset.midtone_gamma());
         apply_tone_curve(img, &c);
         c
     } else {
@@ -183,13 +149,7 @@ pub fn optimize_for_rotary_press_with_options(
 
     let elapsed = start.elapsed().as_micros();
 
-    RetouchReport {
-        preset,
-        original_histogram: hist,
-        tone_curve: curve,
-        unsharp_params: usm,
-        elapsed_micros: elapsed,
-    }
+    RetouchReport { preset, original_histogram: hist, tone_curve: curve, unsharp_params: usm, elapsed_micros: elapsed }
 }
 
 /// Optimize an RGBA image in place for the specified rotary press preset using standard defaults.
@@ -238,33 +198,37 @@ mod tests {
 
     #[test]
     fn test_foto1_retouch_benchmark() {
-        let candidates = [
-            "../../documents/Links/FOTO1.jpg",
-            "../../templates/Links/FOTO1.jpg",
-            "../../foto.jpg",
-            "../../documents/Links/belisario.jpeg",
-        ];
+        let candidates =
+            ["../../documents/Links/FOTO1.jpg", "../../templates/Links/FOTO1.jpg", "../../foto.jpg", "../../documents/Links/belisario.jpeg"];
         for rel in candidates {
             let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
             if let Ok(bytes) = std::fs::read(&path) {
-                println!("
-=========================================");
+                println!(
+                    "
+========================================="
+                );
                 println!("BENCHMARK FOR: {}", rel);
                 println!("File size: {} bytes ({:.2} KB)", bytes.len(), bytes.len() as f64 / 1024.0);
-                
+
                 let t_start = std::time::Instant::now();
                 let decoded = crate::decode_rgba(&bytes);
                 let decode_dur = t_start.elapsed();
                 println!("1. decode_rgba: {:.2} ms", decode_dur.as_secs_f64() * 1000.0);
-                
+
                 if let Some(rgba) = decoded {
                     println!("   Dimensions: {}x{} ({} pixels)", rgba.width(), rgba.height(), rgba.width() * rgba.height());
-                    
+
                     let t_hist = std::time::Instant::now();
                     let hist = PhotoHistogram::from_rgba8(&rgba);
-                    println!("2. PhotoHistogram: {:.2} ms (scene: {:?}, P1={}, P50={}, P99={})",
-                        t_hist.elapsed().as_secs_f64() * 1000.0, hist.scene, hist.p1, hist.p50, hist.p99);
-                    
+                    println!(
+                        "2. PhotoHistogram: {:.2} ms (scene: {:?}, P1={}, P50={}, P99={})",
+                        t_hist.elapsed().as_secs_f64() * 1000.0,
+                        hist.scene,
+                        hist.p1,
+                        hist.p50,
+                        hist.p99
+                    );
+
                     let t_curve = std::time::Instant::now();
                     let curve = ToneCurve::auto_levels_for_rotary(
                         &hist,
@@ -275,34 +239,52 @@ mod tests {
                     let mut img_curved = rgba.clone();
                     apply_tone_curve(&mut img_curved, &curve);
                     println!("3. ToneCurve & auto_levels: {:.2} ms", t_curve.elapsed().as_secs_f64() * 1000.0);
-                    
+
                     let t_usm = std::time::Instant::now();
                     let usm = RotaryPreset::ColdsetNewspaper.unsharp_params();
                     apply_unsharp_mask(&mut img_curved, &usm);
-                    println!("4. Unsharp mask (radius {}, amount {}): {:.2} ms",
-                        usm.radius, usm.amount, t_usm.elapsed().as_secs_f64() * 1000.0);
-                    
+                    println!("4. Unsharp mask (radius {}, amount {}): {:.2} ms", usm.radius, usm.amount, t_usm.elapsed().as_secs_f64() * 1000.0);
+
                     let t_cmyk = std::time::Instant::now();
                     let cmyk = separate_to_rotary_cmyk(&img_curved, RotaryPreset::ColdsetNewspaper);
                     println!("5. CMYK separation: {:.2} ms", t_cmyk.elapsed().as_secs_f64() * 1000.0);
-                    
+
                     let t_tac = std::time::Instant::now();
                     let tac = measure_tac(&cmyk, 220.0);
-                    println!("6. TAC measure: {:.2} ms (max: {:.1}%, avg: {:.1}%, exceeding: {})",
-                        t_tac.elapsed().as_secs_f64() * 1000.0, tac.max_tac, tac.avg_tac, tac.exceeding_pixels);
-                    
+                    println!(
+                        "6. TAC measure: {:.2} ms (max: {:.1}%, avg: {:.1}%, exceeding: {})",
+                        t_tac.elapsed().as_secs_f64() * 1000.0,
+                        tac.max_tac,
+                        tac.avg_tac,
+                        tac.exceeding_pixels
+                    );
+
                     let t_tiff = std::time::Instant::now();
                     let tiff_bytes = crate::encode_cmyk_tiff(&cmyk);
-                    println!("7. TIFF CMYK encode: {:.2} ms (size: {} bytes)",
-                        t_tiff.elapsed().as_secs_f64() * 1000.0, tiff_bytes.map(|b| b.len()).unwrap_or(0));
-                    
+                    println!(
+                        "7. TIFF CMYK encode: {:.2} ms (size: {} bytes)",
+                        t_tiff.elapsed().as_secs_f64() * 1000.0,
+                        tiff_bytes.map(|b| b.len()).unwrap_or(0)
+                    );
+
                     let t_png = std::time::Instant::now();
                     let png_bytes = crate::encode_png(&img_curved);
-                    println!("8. PNG RGBA encode: {:.2} ms (size: {} bytes)",
-                        t_png.elapsed().as_secs_f64() * 1000.0, png_bytes.map(|b| b.len()).unwrap_or(0));
-                    
-                    println!("TOTAL PIPELINE (RGBA): {:.2} ms", (decode_dur + t_hist.elapsed() + t_curve.elapsed() + t_usm.elapsed() + t_png.elapsed()).as_secs_f64() * 1000.0);
-                    println!("TOTAL PIPELINE (CMYK): {:.2} ms", (decode_dur + t_hist.elapsed() + t_curve.elapsed() + t_usm.elapsed() + t_cmyk.elapsed() + t_tac.elapsed() + t_tiff.elapsed()).as_secs_f64() * 1000.0);
+                    println!(
+                        "8. PNG RGBA encode: {:.2} ms (size: {} bytes)",
+                        t_png.elapsed().as_secs_f64() * 1000.0,
+                        png_bytes.map(|b| b.len()).unwrap_or(0)
+                    );
+
+                    println!(
+                        "TOTAL PIPELINE (RGBA): {:.2} ms",
+                        (decode_dur + t_hist.elapsed() + t_curve.elapsed() + t_usm.elapsed() + t_png.elapsed()).as_secs_f64() * 1000.0
+                    );
+                    println!(
+                        "TOTAL PIPELINE (CMYK): {:.2} ms",
+                        (decode_dur + t_hist.elapsed() + t_curve.elapsed() + t_usm.elapsed() + t_cmyk.elapsed() + t_tac.elapsed() + t_tiff.elapsed())
+                            .as_secs_f64()
+                            * 1000.0
+                    );
                 } else {
                     println!("FAILED TO DECODE IMAGE!");
                 }
@@ -311,5 +293,4 @@ mod tests {
             }
         }
     }
-
 }

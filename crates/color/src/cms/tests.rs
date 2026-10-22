@@ -258,6 +258,3 @@ fn cms_is_send_sync() {
     assert_send_sync::<Cms>();
     assert_send_sync::<IccProfile>();
 }
-
-
-

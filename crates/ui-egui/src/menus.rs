@@ -1136,7 +1136,6 @@ pub fn run_ui(app: &mut DesignApp, id: &str, p: &Value) -> Option<Result<Value, 
                     "flatten": "high"
                 });
                 export_pdf_direct(app, &params, &filename)
-
             }
         }
         "app.exportReaderPdf" => {

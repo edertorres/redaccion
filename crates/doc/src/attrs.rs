@@ -669,6 +669,9 @@ attr_set! {
         baseline_shift: f64 = 0.0,
         /// Skew (false italic), degrees.
         skew: f64 = 0.0,
+        /// Paragraph space before/after overrides applied when this character style is active (e.g. via GREP).
+        space_before: Option<f64> = None,
+        space_after: Option<f64> = None,
         fill: String = "[Black]".into(),
         fill_tint: f32 = 1.0,
         stroke: String = "[None]".into(),

@@ -4441,6 +4441,7 @@ fn character_style_options(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
     }
     let cp = st.doc.styles.resolve_char_style(&name);
     let cv = serde_json::to_value(&cp).unwrap_or_default();
+    let cur = |d: &Dialog, k: &str, base: &Value| d.fields.get(k).cloned().unwrap_or_else(|| base.clone());
     let swatches: Vec<String> = st.doc.swatches.iter().map(|s| s.name.clone()).collect();
     let cur_sec = d.s("section");
     let cur_sec = if cur_sec.is_empty() { "general" } else { cur_sec.as_str() };
@@ -4448,6 +4449,7 @@ fn character_style_options(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
         ("general", "General"),
         ("chars", "Basic Character Formats"),
         ("adv_chars", "Advanced Character Formats"),
+        ("spacing", "Paragraph Spacing"),
         ("color", "Character Color"),
         ("opentype", "OpenType Features"),
         ("underline", "Underline Options"),
@@ -4525,6 +4527,19 @@ fn character_style_options(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialo
                 }
                 "adv_chars" => {
                     adv_char_formatting_section(app, ui, d, &cv, "cs");
+                }
+                "spacing" => {
+                    let units = st.doc.settings.horizontal_units;
+                    egui::Grid::new("cs_spacing_grid").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
+                        for (label, key) in [("Space Before:", "spaceBefore"), ("Space After:", "spaceAfter")] {
+                            crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, label));
+                            let v = cur(d, &format!("c.{key}"), &cv[key]).as_f64();
+                            if let Some(n) = crate::widgets::measure(ui, &format!("cs{key}"), v, units, 90.0) {
+                                d.fields.insert(format!("c.{key}"), json!(n));
+                            }
+                            ui.end_row();
+                        }
+                    });
                 }
                 "opentype" => {
                     opentype_section(app, ui, d, &cv, "cs");
@@ -5432,7 +5447,7 @@ mod tests {
 
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx, "");
-        let sections = ["general", "chars", "adv_chars", "color", "opentype", "underline", "strikethrough", "export", "copyfit"];
+        let sections = ["general", "chars", "adv_chars", "spacing", "color", "opentype", "underline", "strikethrough", "export", "copyfit"];
 
         for sec in sections {
             let mut d = Dialog::new("characterStyleOptions", json!({"name": "TestChar"}));

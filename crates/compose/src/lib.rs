@@ -469,6 +469,45 @@ pub fn compose(doc: &Document, story: &Story, frames: &[FrameSpec], opts: &Compo
     compose_with_db(doc, story, frames, opts, FontDb::global())
 }
 
+/// Apply paragraph space before/after overrides defined on character styles
+/// (e.g. triggered via GREP styles or applied to character runs).
+fn apply_character_spacing(doc: &Document, story: &Story, prange: std::ops::Range<usize>, pp: &mut designcraft_doc::ParaProps) {
+    if !pp.nested_styles.is_empty() || !pp.grep_styles.is_empty() {
+        let ovs = crate::overlay::overlays(&story.text, prange.clone(), &pp.nested_styles, &pp.grep_styles);
+        for (_, style_name) in ovs {
+            let cp = doc.styles.resolve_char_style(&style_name);
+            if let Some(sb) = cp.space_before {
+                pp.space_before = sb;
+            }
+            if let Some(sa) = cp.space_after {
+                pp.space_after = sa;
+            }
+        }
+    }
+    for (rr, fmt) in story.runs() {
+        let a = rr.start.max(prange.start);
+        let b = rr.end.min(prange.end);
+        if a >= b {
+            continue;
+        }
+        if !fmt.style.is_empty() {
+            let cp = doc.styles.resolve_char_style(&fmt.style);
+            if let Some(sb) = cp.space_before {
+                pp.space_before = sb;
+            }
+            if let Some(sa) = cp.space_after {
+                pp.space_after = sa;
+            }
+        }
+        if let Some(Some(sb)) = fmt.over.space_before {
+            pp.space_before = sb;
+        }
+        if let Some(Some(sa)) = fmt.over.space_after {
+            pp.space_after = sa;
+        }
+    }
+}
+
 fn compose_with_db(doc: &Document, story: &Story, frames: &[FrameSpec], opts: &ComposeOptions, db: &FontDb) -> ComposedStory {
     let db = &db.scoped(doc.font_scope);
     let mut out = ComposedStory { story: story.id, rev: story.rev, text_len: story.text.len(), ..Default::default() };
@@ -532,7 +571,8 @@ fn compose_with_db(doc: &Document, story: &Story, frames: &[FrameSpec], opts: &C
         note_snaps.push((notes.num, notes.key, notes.placed.len()));
         info.truncate(pi);
         let pf = &story.paras[pi];
-        let (pp, base_chars) = doc.styles.resolve_para(pf);
+        let (mut pp, base_chars) = doc.styles.resolve_para(pf);
+        apply_character_spacing(doc, story, prange.clone(), &mut pp);
         if let Some(t) = story.para_table(pi) {
             if cur.last_baseline.is_some() {
                 match pp.start_paragraph {

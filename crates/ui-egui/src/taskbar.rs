@@ -213,14 +213,12 @@ fn editorial_controls(app: &mut DesignApp, ui: &mut Ui, text: bool) {
                 let _ = app.run("object.fit", json!({"mode": mode, "ids": [id.0]}));
             }
         }
-        let is_placed_photo = app
-            .session
-            .active()
-            .and_then(|st| st.doc.item(id))
-            .is_some_and(|it| matches!(it.content, designcraft_doc::Content::Graphic(_)));
+        let is_placed_photo =
+            app.session.active().and_then(|st| st.doc.item(id)).is_some_and(|it| matches!(it.content, designcraft_doc::Content::Graphic(_)));
         if is_placed_photo {
             let resp = ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Retoque Rotativa (AIE)")));
-            if resp.on_hover_text(crate::i18n::tr(&app.ui.language, "Optimizar foto para rotativa de periódico (ISO 12647-3 / TAC ≤ 220%)")).clicked() {
+            if resp.on_hover_text(crate::i18n::tr(&app.ui.language, "Optimizar foto para rotativa de periódico (ISO 12647-3 / TAC ≤ 220%)")).clicked()
+            {
                 let _ = app.run("image.retouchRotary", json!({"ids": [id.0], "preset": "coldset", "format": "cmyk"}));
             }
         }

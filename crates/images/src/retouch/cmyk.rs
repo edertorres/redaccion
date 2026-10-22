@@ -6,10 +6,10 @@
 //! 3. Measurement and auditing of TAC metrics for preflight verification.
 //! 4. Screen soft-proofing simulating newsprint base paper color and press dot gain.
 
-use image::RgbaImage;
-use designcraft_color::cms::{GenericCmyk, Intent, generic, resolve_cmyk_profile};
-use crate::CmykRaster;
 use super::RotaryPreset;
+use crate::CmykRaster;
+use designcraft_color::cms::{GenericCmyk, Intent, generic, resolve_cmyk_profile};
+use image::RgbaImage;
 
 /// TAC (Total Area Coverage / Total Ink Limit) auditing report for a CMYK raster.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -33,11 +33,7 @@ impl TacMetrics {
 
 /// Convert an sRGB image to a press-ready CMYK raster conforming to the given rotary preset,
 /// with an optional target CMYK ICC profile (such as ISOnewspaper26v4).
-pub fn separate_to_cmyk_with_profile(
-    img: &RgbaImage,
-    preset: RotaryPreset,
-    profile_name: Option<&str>,
-) -> CmykRaster {
+pub fn separate_to_cmyk_with_profile(img: &RgbaImage, preset: RotaryPreset, profile_name: Option<&str>) -> CmykRaster {
     let width = img.width();
     let height = img.height();
     let total_pixels = (width as usize).saturating_mul(height as usize);
@@ -68,12 +64,7 @@ pub fn separate_to_cmyk_with_profile(
         _ => "",
     };
 
-    let icc_profile = if !target_profile.is_empty() {
-        resolve_cmyk_profile(target_profile)
-    } else {
-        None
-    };
-
+    let icc_profile = if !target_profile.is_empty() { resolve_cmyk_profile(target_profile) } else { None };
 
     use rayon::prelude::*;
 
@@ -98,109 +89,100 @@ pub fn separate_to_cmyk_with_profile(
 
     // Parallelize CMYK separation across chunks using Rayon
     const CHUNK_PIXELS: usize = 2048;
-    cmyk_bytes
-        .par_chunks_mut(CHUNK_PIXELS * 4)
-        .enumerate()
-        .for_each(|(chunk_idx, cmyk_chunk)| {
-            const CACHE_SIZE: usize = 4096;
-            let mut cache_keys = [u32::MAX; CACHE_SIZE];
-            let mut cache_cmyk = [[0u8; 4]; CACHE_SIZE];
+    cmyk_bytes.par_chunks_mut(CHUNK_PIXELS * 4).enumerate().for_each(|(chunk_idx, cmyk_chunk)| {
+        const CACHE_SIZE: usize = 4096;
+        let mut cache_keys = [u32::MAX; CACHE_SIZE];
+        let mut cache_cmyk = [[0u8; 4]; CACHE_SIZE];
 
-            let pixel_offset = chunk_idx * CHUNK_PIXELS;
-            let chunk_pixel_count = cmyk_chunk.len() / 4;
+        let pixel_offset = chunk_idx * CHUNK_PIXELS;
+        let chunk_pixel_count = cmyk_chunk.len() / 4;
 
-            for i in 0..chunk_pixel_count {
-                let src_idx = (pixel_offset + i) * 4;
-                let pr = raw_rgba[src_idx];
-                let pg = raw_rgba[src_idx + 1];
-                let pb = raw_rgba[src_idx + 2];
+        for i in 0..chunk_pixel_count {
+            let src_idx = (pixel_offset + i) * 4;
+            let pr = raw_rgba[src_idx];
+            let pg = raw_rgba[src_idx + 1];
+            let pb = raw_rgba[src_idx + 2];
 
-                let rgb_key = ((pr as u32) << 16) | ((pg as u32) << 8) | (pb as u32);
-                let h = ((rgb_key ^ (rgb_key >> 11) ^ (rgb_key >> 5)) as usize) & (CACHE_SIZE - 1);
+            let rgb_key = ((pr as u32) << 16) | ((pg as u32) << 8) | (pb as u32);
+            let h = ((rgb_key ^ (rgb_key >> 11) ^ (rgb_key >> 5)) as usize) & (CACHE_SIZE - 1);
 
-                let dst_idx = i * 4;
-                if cache_keys[h] == rgb_key {
-                    let cached = cache_cmyk[h];
-                    cmyk_chunk[dst_idx] = cached[0];
-                    cmyk_chunk[dst_idx + 1] = cached[1];
-                    cmyk_chunk[dst_idx + 2] = cached[2];
-                    cmyk_chunk[dst_idx + 3] = cached[3];
-                    continue;
-                }
+            let dst_idx = i * 4;
+            if cache_keys[h] == rgb_key {
+                let cached = cache_cmyk[h];
+                cmyk_chunk[dst_idx] = cached[0];
+                cmyk_chunk[dst_idx + 1] = cached[1];
+                cmyk_chunk[dst_idx + 2] = cached[2];
+                cmyk_chunk[dst_idx + 3] = cached[3];
+                continue;
+            }
 
-                let r = (pr as f32) / 255.0;
-                let g = (pg as f32) / 255.0;
-                let b = (pb as f32) / 255.0;
+            let r = (pr as f32) / 255.0;
+            let g = (pg as f32) / 255.0;
+            let b = (pb as f32) / 255.0;
 
-                let [mut c, mut m, mut y, mut k] = if let Some(ref icc) = icc_profile {
-                    if let Some(cmyk) = icc.from_srgb([r, g, b], Intent::RelativeColorimetric) {
-                        if cmyk.len() >= 4 {
-                            [cmyk[0], cmyk[1], cmyk[2], cmyk[3]]
-                        } else {
-                            press.from_srgb([r, g, b], Intent::RelativeColorimetric, true)
-                        }
+            let [mut c, mut m, mut y, mut k] = if let Some(ref icc) = icc_profile {
+                if let Some(cmyk) = icc.from_srgb([r, g, b], Intent::RelativeColorimetric) {
+                    if cmyk.len() >= 4 {
+                        [cmyk[0], cmyk[1], cmyk[2], cmyk[3]]
                     } else {
                         press.from_srgb([r, g, b], Intent::RelativeColorimetric, true)
                     }
                 } else {
                     press.from_srgb([r, g, b], Intent::RelativeColorimetric, true)
-                };
-
-                let total_ink = c + m + y + k;
-                if total_ink > max_tac_f32 && total_ink > 0.0 {
-                    let excess = total_ink - max_tac_f32;
-                    let cmy_sum = c + m + y;
-                    if cmy_sum > 0.0 {
-                        let scale = ((cmy_sum - excess) / cmy_sum).clamp(0.0, 1.0);
-                        c *= scale;
-                        m *= scale;
-                        y *= scale;
-                    } else {
-                        k = max_tac_f32.min(1.0);
-                    }
                 }
+            } else {
+                press.from_srgb([r, g, b], Intent::RelativeColorimetric, true)
+            };
 
-                let mut c_byte = (c * 255.0).round().clamp(0.0, 255.0) as u8;
-                let mut m_byte = (m * 255.0).round().clamp(0.0, 255.0) as u8;
-                let mut y_byte = (y * 255.0).round().clamp(0.0, 255.0) as u8;
-                let mut k_byte = (k * 255.0).round().clamp(0.0, 255.0) as u8;
-
-                let max_byte_sum = (max_tac_f32 * 255.0).round() as u16;
-                let byte_sum = c_byte as u16 + m_byte as u16 + y_byte as u16 + k_byte as u16;
-                if byte_sum > max_byte_sum {
-                    let mut excess = byte_sum - max_byte_sum;
-                    for b in [&mut y_byte, &mut m_byte, &mut c_byte] {
-                        if excess == 0 {
-                            break;
-                        }
-                        let take = (*b as u16).min(excess);
-                        *b -= take as u8;
-                        excess -= take;
-                    }
-                    if excess > 0 {
-                        let take = (k_byte as u16).min(excess);
-                        k_byte -= take as u8;
-                    }
+            let total_ink = c + m + y + k;
+            if total_ink > max_tac_f32 && total_ink > 0.0 {
+                let excess = total_ink - max_tac_f32;
+                let cmy_sum = c + m + y;
+                if cmy_sum > 0.0 {
+                    let scale = ((cmy_sum - excess) / cmy_sum).clamp(0.0, 1.0);
+                    c *= scale;
+                    m *= scale;
+                    y *= scale;
+                } else {
+                    k = max_tac_f32.min(1.0);
                 }
-
-                let res = [c_byte, m_byte, y_byte, k_byte];
-                cache_keys[h] = rgb_key;
-                cache_cmyk[h] = res;
-
-
-                cmyk_chunk[dst_idx] = c_byte;
-                cmyk_chunk[dst_idx + 1] = m_byte;
-                cmyk_chunk[dst_idx + 2] = y_byte;
-                cmyk_chunk[dst_idx + 3] = k_byte;
             }
-        });
 
-    CmykRaster {
-        width,
-        height,
-        cmyk: cmyk_bytes,
-        alpha: if has_transparency { Some(alpha_bytes) } else { None },
-    }
+            let mut c_byte = (c * 255.0).round().clamp(0.0, 255.0) as u8;
+            let mut m_byte = (m * 255.0).round().clamp(0.0, 255.0) as u8;
+            let mut y_byte = (y * 255.0).round().clamp(0.0, 255.0) as u8;
+            let mut k_byte = (k * 255.0).round().clamp(0.0, 255.0) as u8;
+
+            let max_byte_sum = (max_tac_f32 * 255.0).round() as u16;
+            let byte_sum = c_byte as u16 + m_byte as u16 + y_byte as u16 + k_byte as u16;
+            if byte_sum > max_byte_sum {
+                let mut excess = byte_sum - max_byte_sum;
+                for b in [&mut y_byte, &mut m_byte, &mut c_byte] {
+                    if excess == 0 {
+                        break;
+                    }
+                    let take = (*b as u16).min(excess);
+                    *b -= take as u8;
+                    excess -= take;
+                }
+                if excess > 0 {
+                    let take = (k_byte as u16).min(excess);
+                    k_byte -= take as u8;
+                }
+            }
+
+            let res = [c_byte, m_byte, y_byte, k_byte];
+            cache_keys[h] = rgb_key;
+            cache_cmyk[h] = res;
+
+            cmyk_chunk[dst_idx] = c_byte;
+            cmyk_chunk[dst_idx + 1] = m_byte;
+            cmyk_chunk[dst_idx + 2] = y_byte;
+            cmyk_chunk[dst_idx + 3] = k_byte;
+        }
+    });
+
+    CmykRaster { width, height, cmyk: cmyk_bytes, alpha: if has_transparency { Some(alpha_bytes) } else { None } }
 }
 
 /// Convert an sRGB image to a press-ready CMYK raster conforming to the given rotary preset.
@@ -212,17 +194,11 @@ pub fn separate_to_rotary_cmyk(img: &RgbaImage, preset: RotaryPreset) -> CmykRas
     separate_to_cmyk_with_profile(img, preset, None)
 }
 
-
 /// Audit total ink coverage across all pixels in a CMYK raster.
 pub fn measure_tac(raster: &CmykRaster, threshold_percent: f32) -> TacMetrics {
     let total_pixels = usize::try_from(raster.width).unwrap_or(0).saturating_mul(usize::try_from(raster.height).unwrap_or(0));
     if total_pixels == 0 || raster.cmyk.len() < total_pixels * 4 {
-        return TacMetrics {
-            max_tac: 0.0,
-            avg_tac: 0.0,
-            exceeding_pixels: 0,
-            total_pixels: 0,
-        };
+        return TacMetrics { max_tac: 0.0, avg_tac: 0.0, exceeding_pixels: 0, total_pixels: 0 };
     }
 
     let mut max_tac = 0.0f32;
@@ -247,12 +223,7 @@ pub fn measure_tac(raster: &CmykRaster, threshold_percent: f32) -> TacMetrics {
 
     let avg_tac = (sum_tac / (total_pixels as f64)) as f32;
 
-    TacMetrics {
-        max_tac,
-        avg_tac,
-        exceeding_pixels,
-        total_pixels: total_pixels as u64,
-    }
+    TacMetrics { max_tac, avg_tac, exceeding_pixels, total_pixels: total_pixels as u64 }
 }
 
 /// Simulate on-screen newsprint soft-proofing from a CMYK raster.
@@ -316,58 +287,55 @@ pub fn cmyk_raster_to_display_rgba(raster: &CmykRaster) -> RgbaImage {
     let generic_newspaper = GenericCmyk::new(generic::newspaper_coldset());
 
     const CHUNK_PIXELS: usize = 2048;
-    out_rgba
-        .par_chunks_mut(CHUNK_PIXELS * 4)
-        .zip(raster.cmyk.par_chunks(CHUNK_PIXELS * 4))
-        .for_each(|(rgba_chunk, cmyk_chunk)| {
-            const CACHE_SIZE: usize = 4096;
-            let mut cache_keys = [u32::MAX; CACHE_SIZE];
-            let mut cache_rgb = [[0u8; 3]; CACHE_SIZE];
+    out_rgba.par_chunks_mut(CHUNK_PIXELS * 4).zip(raster.cmyk.par_chunks(CHUNK_PIXELS * 4)).for_each(|(rgba_chunk, cmyk_chunk)| {
+        const CACHE_SIZE: usize = 4096;
+        let mut cache_keys = [u32::MAX; CACHE_SIZE];
+        let mut cache_rgb = [[0u8; 3]; CACHE_SIZE];
 
-            for (rgba_px, cmyk_px) in rgba_chunk.chunks_exact_mut(4).zip(cmyk_chunk.chunks_exact(4)) {
-                let c_byte = cmyk_px[0];
-                let m_byte = cmyk_px[1];
-                let y_byte = cmyk_px[2];
-                let k_byte = cmyk_px[3];
+        for (rgba_px, cmyk_px) in rgba_chunk.chunks_exact_mut(4).zip(cmyk_chunk.chunks_exact(4)) {
+            let c_byte = cmyk_px[0];
+            let m_byte = cmyk_px[1];
+            let y_byte = cmyk_px[2];
+            let k_byte = cmyk_px[3];
 
-                let cmyk_key = ((c_byte as u32) << 24) | ((m_byte as u32) << 16) | ((y_byte as u32) << 8) | (k_byte as u32);
-                let h = ((cmyk_key ^ (cmyk_key >> 16) ^ (cmyk_key >> 8)) as usize) & (CACHE_SIZE - 1);
+            let cmyk_key = ((c_byte as u32) << 24) | ((m_byte as u32) << 16) | ((y_byte as u32) << 8) | (k_byte as u32);
+            let h = ((cmyk_key ^ (cmyk_key >> 16) ^ (cmyk_key >> 8)) as usize) & (CACHE_SIZE - 1);
 
-                if cache_keys[h] == cmyk_key {
-                    let rgb = cache_rgb[h];
-                    rgba_px[0] = rgb[0];
-                    rgba_px[1] = rgb[1];
-                    rgba_px[2] = rgb[2];
-                    continue;
-                }
+            if cache_keys[h] == cmyk_key {
+                let rgb = cache_rgb[h];
+                rgba_px[0] = rgb[0];
+                rgba_px[1] = rgb[1];
+                rgba_px[2] = rgb[2];
+                continue;
+            }
 
-                let c = (c_byte as f32) / 255.0;
-                let m = (m_byte as f32) / 255.0;
-                let y = (y_byte as f32) / 255.0;
-                let k = (k_byte as f32) / 255.0;
+            let c = (c_byte as f32) / 255.0;
+            let m = (m_byte as f32) / 255.0;
+            let y = (y_byte as f32) / 255.0;
+            let k = (k_byte as f32) / 255.0;
 
-                let [r, g, b] = if let Some(ref icc) = icc_profile {
-                    if let Some(rgb) = icc.to_srgb(&[c, m, y, k], Intent::RelativeColorimetric) {
-                        rgb
-                    } else {
-                        generic_newspaper.to_srgb([c, m, y, k], false)
-                    }
+            let [r, g, b] = if let Some(ref icc) = icc_profile {
+                if let Some(rgb) = icc.to_srgb(&[c, m, y, k], Intent::RelativeColorimetric) {
+                    rgb
                 } else {
                     generic_newspaper.to_srgb([c, m, y, k], false)
-                };
+                }
+            } else {
+                generic_newspaper.to_srgb([c, m, y, k], false)
+            };
 
-                let r_byte = (r * 255.0).round().clamp(0.0, 255.0) as u8;
-                let g_byte = (g * 255.0).round().clamp(0.0, 255.0) as u8;
-                let b_byte = (b * 255.0).round().clamp(0.0, 255.0) as u8;
+            let r_byte = (r * 255.0).round().clamp(0.0, 255.0) as u8;
+            let g_byte = (g * 255.0).round().clamp(0.0, 255.0) as u8;
+            let b_byte = (b * 255.0).round().clamp(0.0, 255.0) as u8;
 
-                cache_keys[h] = cmyk_key;
-                cache_rgb[h] = [r_byte, g_byte, b_byte];
+            cache_keys[h] = cmyk_key;
+            cache_rgb[h] = [r_byte, g_byte, b_byte];
 
-                rgba_px[0] = r_byte;
-                rgba_px[1] = g_byte;
-                rgba_px[2] = b_byte;
-            }
-        });
+            rgba_px[0] = r_byte;
+            rgba_px[1] = g_byte;
+            rgba_px[2] = b_byte;
+        }
+    });
 
     if let Some(ref alpha) = raster.alpha {
         for (rgba_px, &a) in out_rgba.chunks_exact_mut(4).zip(alpha.iter()) {

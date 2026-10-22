@@ -209,7 +209,10 @@ pub fn check_with_tac(s: &Session, min_ppi: f64, max_tac: Option<f64>) -> Vec<Is
                                     out.push(Issue {
                                         severity: "warning",
                                         kind: "inkCoverage",
-                                        message: format!("{}: Total Area Coverage ({:.0}%) exceeds {:.0}% limit for press ({} pixels)", a.name, tac.max_tac, limit, tac.exceeding_pixels),
+                                        message: format!(
+                                            "{}: Total Area Coverage ({:.0}%) exceeds {:.0}% limit for press ({} pixels)",
+                                            a.name, tac.max_tac, limit, tac.exceeding_pixels
+                                        ),
                                         item: Some(it.id.0),
                                         page,
                                     });
@@ -346,9 +349,9 @@ mod missing_glyph_tests {
 
 #[cfg(test)]
 mod tac_tests {
-    use serde_json::json;
     use crate::Session;
     use crate::cmd::base64_encode;
+    use serde_json::json;
 
     #[test]
     fn preflight_flags_cmyk_image_exceeding_tac_limit() {
@@ -359,23 +362,22 @@ mod tac_tests {
         let raster = designcraft_images::CmykRaster {
             width: 2,
             height: 2,
-            cmyk: vec![
-                204, 204, 204, 204,
-                204, 204, 204, 204,
-                204, 204, 204, 204,
-                204, 204, 204, 204,
-            ],
+            cmyk: vec![204, 204, 204, 204, 204, 204, 204, 204, 204, 204, 204, 204, 204, 204, 204, 204],
             alpha: None,
         };
         let tiff_bytes = designcraft_images::encode_cmyk_tiff(&raster).unwrap();
 
-        s.execute("file.place", &json!({
-            "base64": base64_encode(&tiff_bytes),
-            "name": "high_tac_ad.tif",
-            "x": 72,
-            "y": 72,
-            "width": 100,
-        })).unwrap();
+        s.execute(
+            "file.place",
+            &json!({
+                "base64": base64_encode(&tiff_bytes),
+                "name": "high_tac_ad.tif",
+                "x": 72,
+                "y": 72,
+                "width": 100,
+            }),
+        )
+        .unwrap();
 
         // Run preflight with rotary maxTac: 220%
         let res = s.execute("preflight.run", &json!({"maxTac": 220.0})).unwrap();

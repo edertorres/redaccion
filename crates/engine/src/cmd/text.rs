@@ -1268,6 +1268,78 @@ mod nested_style_tests {
         assert_eq!(fill_at(text.find("then").unwrap()), "[Black]");
         assert_eq!(fill_at(text.find("2026").unwrap()), "C=0 M=100 Y=0 K=0", "GREP: digits");
     }
+
+    #[test]
+    fn grep_style_applies_character_space_after_to_paragraph() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({})).unwrap();
+        s.execute("style.character.create", &json!({"name": "PhotoCredit", "chars": {"spaceAfter": 25.0}})).unwrap();
+        let r = s
+            .execute(
+                "frame.create",
+                &json!({
+                    "rect": [72, 72, 400, 400],
+                    "content": "text",
+                    "text": "First para ending with Foto: Carlos Betancur\nSecond paragraph following after"
+                }),
+            )
+            .unwrap();
+        let sid = r["story"].as_u64().unwrap();
+        let d0 = s.doc().unwrap().doc.clone();
+        let cs0 = designcraft_compose::compose_story(&d0, designcraft_doc::StoryId(sid), &Default::default());
+        let line0_p2 = cs0.frames[0].lines.iter().find(|l| l.para == 1).unwrap().baseline;
+
+        s.execute("text.select", &json!({"story": sid, "anchor": 0, "focus": 3})).unwrap();
+        s.execute(
+            "type.para",
+            &json!({"attrs": {
+                "grepStyles": [{"style": "PhotoCredit", "pattern": "Foto:.+"}]
+            }}),
+        )
+        .unwrap();
+
+        let d1 = s.doc().unwrap().doc.clone();
+        let cs1 = designcraft_compose::compose_story(&d1, designcraft_doc::StoryId(sid), &Default::default());
+        let line1_p2 = cs1.frames[0].lines.iter().find(|l| l.para == 1).unwrap().baseline;
+
+        assert!((line1_p2 - line0_p2 - 25.0).abs() < 0.001, "second paragraph must be pushed down by 25pt space_after");
+    }
+
+    #[test]
+    fn grep_style_short_paragraph_applies_space_after() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({})).unwrap();
+        s.execute("style.character.create", &json!({"name": "ShortNotice", "chars": {"spaceAfter": 30.0}})).unwrap();
+        let r = s
+            .execute(
+                "frame.create",
+                &json!({
+                    "rect": [72, 72, 400, 400],
+                    "content": "text",
+                    "text": "Short notice here\nSecond paragraph following after"
+                }),
+            )
+            .unwrap();
+        let sid = r["story"].as_u64().unwrap();
+        let d0 = s.doc().unwrap().doc.clone();
+        let cs0 = designcraft_compose::compose_story(&d0, designcraft_doc::StoryId(sid), &Default::default());
+        let line0_p2 = cs0.frames[0].lines.iter().find(|l| l.para == 1).unwrap().baseline;
+
+        s.execute("text.select", &json!({"story": sid, "anchor": 0, "focus": 3})).unwrap();
+        s.execute(
+            "type.para",
+            &json!({"attrs": {
+                "grepStyles": [{"style": "ShortNotice", "pattern": "^.{1,30}$"}]
+            }}),
+        )
+        .unwrap();
+
+        let d1 = s.doc().unwrap().doc.clone();
+        let cs1 = designcraft_compose::compose_story(&d1, designcraft_doc::StoryId(sid), &Default::default());
+        let line1_p2 = cs1.frames[0].lines.iter().find(|l| l.para == 1).unwrap().baseline;
+
+        assert!((line1_p2 - line0_p2 - 30.0).abs() < 0.001, "short paragraph must push next para down by 30pt");
+    }
 }
 
 #[cfg(test)]

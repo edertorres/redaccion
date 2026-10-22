@@ -174,18 +174,17 @@ fn builtin_rgb_cache(name: &str) -> Option<Arc<IccProfile>> {
 
 fn user_profile(name: &str) -> Option<Arc<IccProfile>> {
     let clean = name.trim_end_matches(".icc").trim_end_matches(".icm");
-    let norm = |s: &str| {
-        s.chars()
-            .filter(|c| c.is_ascii_alphanumeric())
-            .collect::<String>()
-            .to_ascii_lowercase()
-    };
+    let norm = |s: &str| s.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_ascii_lowercase();
     let clean_norm = norm(clean);
-    USER.read().unwrap_or_else(|e| e.into_inner()).iter().find(|p| {
-        p.name == name
-            || p.name.trim_end_matches(".icc").trim_end_matches(".icm").eq_ignore_ascii_case(clean)
-            || norm(p.name.trim_end_matches(".icc").trim_end_matches(".icm")) == clean_norm
-    }).cloned()
+    USER.read()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .find(|p| {
+            p.name == name
+                || p.name.trim_end_matches(".icc").trim_end_matches(".icm").eq_ignore_ascii_case(clean)
+                || norm(p.name.trim_end_matches(".icc").trim_end_matches(".icm")) == clean_norm
+        })
+        .cloned()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -199,11 +198,7 @@ fn try_find_and_load_profile(name: &str) -> Option<Arc<IccProfile>> {
         return user_profile(&info.name).or_else(|| user_profile(name));
     }
 
-    let filename = if clean.ends_with(".icc") || clean.ends_with(".icm") {
-        clean.to_string()
-    } else {
-        format!("{clean}.icc")
-    };
+    let filename = if clean.ends_with(".icc") || clean.ends_with(".icm") { clean.to_string() } else { format!("{clean}.icc") };
 
     let mut candidate_dirs = vec![
         std::path::PathBuf::from("."),
@@ -235,13 +230,7 @@ fn try_find_and_load_profile(name: &str) -> Option<Arc<IccProfile>> {
 fn auto_discover_system_profiles() {
     static DISCOVERED: OnceLock<()> = OnceLock::new();
     DISCOVERED.get_or_init(|| {
-        let candidates = [
-            "ISOnewspaper26v4",
-            "ISOnewspaper26v4.icc",
-            "ISOnewspaper26v4_gr",
-            "ISOnewspaper26v4_gr.icc",
-            "WAN-IFRAnewspaper26v5.icc",
-        ];
+        let candidates = ["ISOnewspaper26v4", "ISOnewspaper26v4.icc", "ISOnewspaper26v4_gr", "ISOnewspaper26v4_gr.icc", "WAN-IFRAnewspaper26v5.icc"];
         for cand in candidates {
             let _ = try_find_and_load_profile(cand);
         }
@@ -270,13 +259,7 @@ pub fn resolve_gray_profile(name: &str) -> Option<Arc<IccProfile>> {
 
 /// Raw bytes of a CMYK profile by name (if it was loaded from disk / registered).
 pub fn cmyk_profile_bytes(name: &str) -> Option<Arc<Vec<u8>>> {
-    resolve_cmyk_profile(name).and_then(|p| {
-        if !p.raw_bytes.is_empty() {
-            Some(p.raw_bytes.clone())
-        } else {
-            None
-        }
-    })
+    resolve_cmyk_profile(name).and_then(|p| if !p.raw_bytes.is_empty() { Some(p.raw_bytes.clone()) } else { None })
 }
 
 fn cmyk_space(name: &str) -> Result<CmykSpace, CmsError> {
@@ -330,7 +313,6 @@ pub fn profiles() -> Vec<ProfileInfo> {
     }
     v
 }
-
 
 /// Register an ICC profile from bytes (named by its description unless `name` is given).
 /// Re-registering a name replaces the old profile.

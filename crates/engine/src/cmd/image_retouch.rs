@@ -6,15 +6,14 @@
 //! - Coarse halftone screen unsharp masking.
 //! - ISO 12647-3 CMYK separation with strict TAC <= 220% clamping.
 
-use std::sync::Arc;
 use serde_json::{Value, json};
+use std::sync::Arc;
 
 use designcraft_doc::{Asset, AssetId, Content};
 use designcraft_images::{
-    RetouchOptions, RotaryPreset, decode_cmyk_tiff, encode_cmyk_tiff, is_cmyk_tiff,
-    measure_tac, optimize_for_rotary_press_with_options, separate_to_cmyk_with_profile,
+    RetouchOptions, RotaryPreset, decode_cmyk_tiff, encode_cmyk_tiff, is_cmyk_tiff, measure_tac, optimize_for_rotary_press_with_options,
+    separate_to_cmyk_with_profile,
 };
-
 
 use super::{CommandSpec, bad, cmd, has_selection, targets};
 use crate::{Result, Session};
@@ -54,11 +53,7 @@ fn retouch_rotary(s: &mut Session, p: &Value) -> Result<Value> {
         None
     };
 
-    let retouch_opts = RetouchOptions {
-        auto_levels,
-        sharpen,
-        custom_sharpen,
-    };
+    let retouch_opts = RetouchOptions { auto_levels, sharpen, custom_sharpen };
 
     let target_ids = targets(s, p)?;
     if target_ids.is_empty() {
@@ -86,23 +81,19 @@ fn retouch_rotary(s: &mut Session, p: &Value) -> Result<Value> {
                 return Err(bad(ID, format!("asset {} is a vector format (PDF/SVG); only raster photos can be retouched", asset.name)));
             }
 
-            let rgba = designcraft_images::decode_rgba(&asset.data)
-                .ok_or_else(|| bad(ID, format!("could not decode raster image from {}", asset.name)))?;
+            let rgba =
+                designcraft_images::decode_rgba(&asset.data).ok_or_else(|| bad(ID, format!("could not decode raster image from {}", asset.name)))?;
 
             let mut retouched_rgba = rgba;
             let report = optimize_for_rotary_press_with_options(&mut retouched_rgba, preset, &retouch_opts);
             let (w, h) = retouched_rgba.dimensions();
 
-            let stem = std::path::Path::new(&asset.name)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("photo");
+            let stem = std::path::Path::new(&asset.name).file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
 
             let (new_aid, tac_info) = if to_cmyk {
                 let cmyk_raster = separate_to_cmyk_with_profile(&retouched_rgba, preset, profile_param);
                 let tac_metrics = measure_tac(&cmyk_raster, preset.max_tac_percent() as f32);
-                let tiff_bytes = encode_cmyk_tiff(&cmyk_raster)
-                    .map_err(|e| bad(ID, format!("failed to encode CMYK TIFF: {e}")))?;
+                let tiff_bytes = encode_cmyk_tiff(&cmyk_raster).map_err(|e| bad(ID, format!("failed to encode CMYK TIFF: {e}")))?;
 
                 let aid = AssetId(d.alloc());
                 let new_asset = Asset {
@@ -118,11 +109,7 @@ fn retouch_rotary(s: &mut Session, p: &Value) -> Result<Value> {
                 let target_prof = profile_param.unwrap_or(if preset == RotaryPreset::ColdsetNewspaper { "ISOnewspaper26v4" } else { "Generic CMYK" });
                 let resolved_icc = designcraft_color::cms::resolve_cmyk_profile(target_prof);
                 let is_icc = resolved_icc.is_some();
-                let profile_label = if is_icc {
-                    target_prof.to_string()
-                } else {
-                    format!("{target_prof} (Generic Synthetic Model)")
-                };
+                let profile_label = if is_icc { target_prof.to_string() } else { format!("{target_prof} (Generic Synthetic Model)") };
                 (
                     aid,
                     Some(json!({
@@ -134,10 +121,8 @@ fn retouch_rotary(s: &mut Session, p: &Value) -> Result<Value> {
                         "isIccProfile": is_icc,
                     })),
                 )
-
             } else {
-                let png_bytes = designcraft_images::encode_png(&retouched_rgba)
-                    .map_err(|e| bad(ID, format!("failed to encode PNG: {e}")))?;
+                let png_bytes = designcraft_images::encode_png(&retouched_rgba).map_err(|e| bad(ID, format!("failed to encode PNG: {e}")))?;
 
                 let aid = AssetId(d.alloc());
                 let new_asset = Asset {
@@ -268,7 +253,6 @@ pub fn specs() -> Vec<CommandSpec> {
             has_selection,
             retouch_rotary
         ),
-
         cmd!(
             query "image.analyzeScene",
             "Analizar Escena Fotográfica",
@@ -284,8 +268,8 @@ pub fn specs() -> Vec<CommandSpec> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use designcraft_doc::ItemId;
     use crate::cmd::base64_encode;
+    use designcraft_doc::ItemId;
 
     fn make_test_photo_png() -> Vec<u8> {
         let mut img = designcraft_images::image::RgbaImage::new(40, 40);
@@ -304,13 +288,18 @@ mod tests {
         s.execute("file.new", &json!({})).unwrap();
 
         let png_bytes = make_test_photo_png();
-        let placed = s.execute("file.place", &json!({
-            "base64": base64_encode(&png_bytes),
-            "name": "editorial_sample.png",
-            "x": 72,
-            "y": 72,
-            "width": 200,
-        })).unwrap();
+        let placed = s
+            .execute(
+                "file.place",
+                &json!({
+                    "base64": base64_encode(&png_bytes),
+                    "name": "editorial_sample.png",
+                    "x": 72,
+                    "y": 72,
+                    "width": 200,
+                }),
+            )
+            .unwrap();
 
         let item_id = placed["id"].as_u64().unwrap();
         let orig_asset_id = placed["asset"].as_u64().unwrap();
@@ -323,11 +312,16 @@ mod tests {
         assert_eq!(arr[0]["totalPixels"].as_u64().unwrap(), 40 * 40);
 
         // 2. Execute retouch for rotary coldset
-        let res = s.execute("image.retouchRotary", &json!({
-            "ids": [item_id],
-            "preset": "coldset",
-            "format": "rgba",
-        })).unwrap();
+        let res = s
+            .execute(
+                "image.retouchRotary",
+                &json!({
+                    "ids": [item_id],
+                    "preset": "coldset",
+                    "format": "rgba",
+                }),
+            )
+            .unwrap();
 
         let retouched = res["retouched"].as_array().unwrap();
         assert_eq!(retouched.len(), 1);
@@ -370,21 +364,31 @@ mod tests {
         s.execute("file.new", &json!({})).unwrap();
 
         let png_bytes = make_test_photo_png();
-        let placed = s.execute("file.place", &json!({
-            "base64": base64_encode(&png_bytes),
-            "name": "dark_photo.png",
-            "x": 72,
-            "y": 72,
-            "width": 200,
-        })).unwrap();
+        let placed = s
+            .execute(
+                "file.place",
+                &json!({
+                    "base64": base64_encode(&png_bytes),
+                    "name": "dark_photo.png",
+                    "x": 72,
+                    "y": 72,
+                    "width": 200,
+                }),
+            )
+            .unwrap();
 
         let item_id = placed["id"].as_u64().unwrap();
 
-        let res = s.execute("image.retouch_rotary", &json!({
-            "ids": [item_id],
-            "preset": "coldset",
-            "format": "cmyk",
-        })).unwrap();
+        let res = s
+            .execute(
+                "image.retouch_rotary",
+                &json!({
+                    "ids": [item_id],
+                    "preset": "coldset",
+                    "format": "cmyk",
+                }),
+            )
+            .unwrap();
 
         let retouched = res["retouched"].as_array().unwrap();
         let tac_info = &retouched[0]["tac"];
@@ -411,21 +415,31 @@ mod tests {
         s.execute("file.new", &json!({})).unwrap();
 
         let png_bytes = make_test_photo_png();
-        let placed = s.execute("file.place", &json!({
-            "base64": base64_encode(&png_bytes),
-            "name": "default_photo.png",
-            "x": 72,
-            "y": 72,
-            "width": 200,
-        })).unwrap();
+        let placed = s
+            .execute(
+                "file.place",
+                &json!({
+                    "base64": base64_encode(&png_bytes),
+                    "name": "default_photo.png",
+                    "x": 72,
+                    "y": 72,
+                    "width": 200,
+                }),
+            )
+            .unwrap();
 
         let item_id = placed["id"].as_u64().unwrap();
 
         // Call without specifying "format" parameter
-        let res = s.execute("image.retouchRotary", &json!({
-            "ids": [item_id],
-            "preset": "coldset",
-        })).unwrap();
+        let res = s
+            .execute(
+                "image.retouchRotary",
+                &json!({
+                    "ids": [item_id],
+                    "preset": "coldset",
+                }),
+            )
+            .unwrap();
 
         let retouched = res["retouched"].as_array().unwrap();
         assert_eq!(retouched.len(), 1);
@@ -446,22 +460,32 @@ mod tests {
         s.execute("file.new", &json!({})).unwrap();
 
         let png_bytes = make_test_photo_png();
-        let placed = s.execute("file.place", &json!({
-            "base64": base64_encode(&png_bytes),
-            "name": "news_photo.png",
-            "x": 72,
-            "y": 72,
-            "width": 200,
-        })).unwrap();
+        let placed = s
+            .execute(
+                "file.place",
+                &json!({
+                    "base64": base64_encode(&png_bytes),
+                    "name": "news_photo.png",
+                    "x": 72,
+                    "y": 72,
+                    "width": 200,
+                }),
+            )
+            .unwrap();
 
         let item_id = placed["id"].as_u64().unwrap();
 
-        let res = s.execute("image.retouchRotary", &json!({
-            "ids": [item_id],
-            "preset": "coldset",
-            "profile": "ISOnewspaper26v4",
-            "format": "cmyk",
-        })).unwrap();
+        let res = s
+            .execute(
+                "image.retouchRotary",
+                &json!({
+                    "ids": [item_id],
+                    "preset": "coldset",
+                    "profile": "ISOnewspaper26v4",
+                    "format": "cmyk",
+                }),
+            )
+            .unwrap();
 
         let retouched = res["retouched"].as_array().unwrap();
         let tac_info = &retouched[0]["tac"];
@@ -469,4 +493,3 @@ mod tests {
         assert!(tac_info["maxTac"].as_f64().unwrap() <= 220.5);
     }
 }
-

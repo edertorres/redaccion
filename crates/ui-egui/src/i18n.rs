@@ -243,6 +243,7 @@ const TABLE: &[(&str, [&str; 5])] = &[
     ),
     ("Smart Dimensions", ["Smarte Maße", "Mesures intelligentes", "Dimensiones inteligentes", "スマートサイズ", "智能尺寸"]),
     ("Smart Spacing", ["Smarte Abstände", "Espacements intelligents", "Espaciado inteligente", "スマート間隔", "智能间距"]),
+    ("Paragraph Spacing", ["Absatzabstände", "Espacement des paragraphes", "Espacio de párrafo", "段落のスペース", "段落间距"]),
     ("Snap to Zone", ["Fangzone", "Zone de magnétisme", "Zona de ajuste", "スナップゾーン", "靠齐区域"]),
     // Window and panels.
     ("Properties", ["Eigenschaften", "Propriétés", "Propiedades", "プロパティ", "属性"]),

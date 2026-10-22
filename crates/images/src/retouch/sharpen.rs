@@ -21,11 +21,7 @@ pub struct UnsharpParams {
 
 impl Default for UnsharpParams {
     fn default() -> Self {
-        Self {
-            radius: 0.8,
-            amount: 0.40,
-            threshold: 6,
-        }
+        Self { radius: 0.8, amount: 0.40, threshold: 6 }
     }
 }
 
@@ -54,10 +50,7 @@ pub fn apply_unsharp_mask(img: &mut RgbaImage, params: &UnsharpParams) {
     };
 
     // Extract perceptual luminance Y into a flat buffer (1 float per pixel)
-    let orig_lum: Vec<f32> = img
-        .pixels()
-        .map(|p| 0.299 * (p[0] as f32) + 0.587 * (p[1] as f32) + 0.114 * (p[2] as f32))
-        .collect();
+    let orig_lum: Vec<f32> = img.pixels().map(|p| 0.299 * (p[0] as f32) + 0.587 * (p[1] as f32) + 0.114 * (p[2] as f32)).collect();
 
     if orig_lum.len() != total_pixels {
         return;
@@ -67,62 +60,55 @@ pub fn apply_unsharp_mask(img: &mut RgbaImage, params: &UnsharpParams) {
 
     // Pass 1: Horizontal Gaussian blur (orig_lum -> temp_buf) parallelized by rows
     let mut temp_buf = vec![0f32; total_pixels];
-    temp_buf
-        .par_chunks_exact_mut(width)
-        .enumerate()
-        .for_each(|(y, row_dest)| {
-            let row_offset = y * width;
-            for (x, dest_pixel) in row_dest.iter_mut().enumerate().take(width) {
-                let mut acc = 0.0f32;
-                for (k_idx, &weight) in kernel.iter().enumerate() {
-                    let dx = (x as isize) + (k_idx as isize) - r;
-                    let sample_x = dx.clamp(0, (width as isize).saturating_sub(1)) as usize;
-                    if let Some(&sample) = orig_lum.get(row_offset + sample_x) {
-                        acc += sample * weight;
-                    }
+    temp_buf.par_chunks_exact_mut(width).enumerate().for_each(|(y, row_dest)| {
+        let row_offset = y * width;
+        for (x, dest_pixel) in row_dest.iter_mut().enumerate().take(width) {
+            let mut acc = 0.0f32;
+            for (k_idx, &weight) in kernel.iter().enumerate() {
+                let dx = (x as isize) + (k_idx as isize) - r;
+                let sample_x = dx.clamp(0, (width as isize).saturating_sub(1)) as usize;
+                if let Some(&sample) = orig_lum.get(row_offset + sample_x) {
+                    acc += sample * weight;
                 }
-                *dest_pixel = acc;
             }
-        });
+            *dest_pixel = acc;
+        }
+    });
 
     // Pass 2: Vertical Gaussian blur and apply luminance-only sharpening back to img
     let threshold_f32 = params.threshold as f32;
     let amount = params.amount;
 
-    img.as_flat_samples_mut()
-        .samples
-        .par_chunks_exact_mut(width * 4)
-        .enumerate()
-        .for_each(|(y, row_rgba)| {
-            let row_offset = y * width;
-            for x in 0..width {
-                let mut blur_lum = 0.0f32;
-                for (k_idx, &weight) in kernel.iter().enumerate() {
-                    let dy = (y as isize) + (k_idx as isize) - r;
-                    let sample_y = dy.clamp(0, (height as isize).saturating_sub(1)) as usize;
-                    let sample_idx = sample_y * width + x;
-                    if let Some(&sample) = temp_buf.get(sample_idx) {
-                        blur_lum += sample * weight;
-                    }
-                }
-
-                let orig_idx = row_offset + x;
-                if let Some(&orig_y) = orig_lum.get(orig_idx) {
-                    let diff_y = orig_y - blur_lum;
-                    if diff_y.abs() >= threshold_f32 {
-                        let delta = amount * diff_y;
-                        let r_orig = row_rgba[x * 4] as f32;
-                        let g_orig = row_rgba[x * 4 + 1] as f32;
-                        let b_orig = row_rgba[x * 4 + 2] as f32;
-
-                        row_rgba[x * 4] = (r_orig + delta).round().clamp(0.0, 255.0) as u8;
-                        row_rgba[x * 4 + 1] = (g_orig + delta).round().clamp(0.0, 255.0) as u8;
-                        row_rgba[x * 4 + 2] = (b_orig + delta).round().clamp(0.0, 255.0) as u8;
-                    }
-                    // row_rgba[x * 4 + 3] (alpha) remains untouched
+    img.as_flat_samples_mut().samples.par_chunks_exact_mut(width * 4).enumerate().for_each(|(y, row_rgba)| {
+        let row_offset = y * width;
+        for x in 0..width {
+            let mut blur_lum = 0.0f32;
+            for (k_idx, &weight) in kernel.iter().enumerate() {
+                let dy = (y as isize) + (k_idx as isize) - r;
+                let sample_y = dy.clamp(0, (height as isize).saturating_sub(1)) as usize;
+                let sample_idx = sample_y * width + x;
+                if let Some(&sample) = temp_buf.get(sample_idx) {
+                    blur_lum += sample * weight;
                 }
             }
-        });
+
+            let orig_idx = row_offset + x;
+            if let Some(&orig_y) = orig_lum.get(orig_idx) {
+                let diff_y = orig_y - blur_lum;
+                if diff_y.abs() >= threshold_f32 {
+                    let delta = amount * diff_y;
+                    let r_orig = row_rgba[x * 4] as f32;
+                    let g_orig = row_rgba[x * 4 + 1] as f32;
+                    let b_orig = row_rgba[x * 4 + 2] as f32;
+
+                    row_rgba[x * 4] = (r_orig + delta).round().clamp(0.0, 255.0) as u8;
+                    row_rgba[x * 4 + 1] = (g_orig + delta).round().clamp(0.0, 255.0) as u8;
+                    row_rgba[x * 4 + 2] = (b_orig + delta).round().clamp(0.0, 255.0) as u8;
+                }
+                // row_rgba[x * 4 + 3] (alpha) remains untouched
+            }
+        }
+    });
 }
 
 /// Compute 1D Gaussian filter weights normalized to sum to 1.0.
@@ -174,11 +160,7 @@ mod tests {
             }
         }
 
-        let params = UnsharpParams {
-            radius: 1.0,
-            amount: 1.5,
-            threshold: 2,
-        };
+        let params = UnsharpParams { radius: 1.0, amount: 1.5, threshold: 2 };
         apply_unsharp_mask(&mut img, &params);
 
         // Dark side near the edge should dip darker (< 50)

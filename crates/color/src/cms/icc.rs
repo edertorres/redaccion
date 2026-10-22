@@ -59,7 +59,15 @@ impl IccProfile {
             other => return Err(CmsError::Unsupported(format!("profile colour space {other:?} is not RGB, CMYK or Gray"))),
         };
         let name = name.or_else(|| text(&profile.description)).unwrap_or_else(|| format!("Untitled {kind:?} profile"));
-        Ok(Self { name, kind, raw_bytes: Arc::new(Vec::new()), profile, srgb: ColorProfile::new_srgb(), to_srgb: Default::default(), from_srgb: Default::default() })
+        Ok(Self {
+            name,
+            kind,
+            raw_bytes: Arc::new(Vec::new()),
+            profile,
+            srgb: ColorProfile::new_srgb(),
+            to_srgb: Default::default(),
+            from_srgb: Default::default(),
+        })
     }
 
     pub fn from_bytes(name: Option<String>, bytes: &[u8]) -> Result<Self, CmsError> {

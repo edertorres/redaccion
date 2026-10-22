@@ -580,17 +580,14 @@ pub fn status_bar(app: &mut DesignApp, ui: &mut egui::Ui) {
                     app.ui.dialog = Some(crate::dialogs::Dialog::new("editorialOverview", json!({})));
                 }
                 ui.add_space(8.0);
-                ui.menu_button(
-                    egui::RichText::new(crate::i18n::tr(&app.ui.language, "[Basic] (working) ▾")).font(small.clone()),
-                    |ui| {
-                        ui.label(egui::RichText::new("✓ [Basic] (working)").font(small.clone()));
-                        ui.separator();
-                        if ui.button(format!("📋 {}", crate::i18n::tr(&app.ui.language, "Preflight Panel..."))).clicked() {
-                            let _ = app.run("window.panel", json!({"panel": "preflight"}));
-                            ui.close();
-                        }
-                    },
-                );
+                ui.menu_button(egui::RichText::new(crate::i18n::tr(&app.ui.language, "[Basic] (working) ▾")).font(small.clone()), |ui| {
+                    ui.label(egui::RichText::new("✓ [Basic] (working)").font(small.clone()));
+                    ui.separator();
+                    if ui.button(format!("📋 {}", crate::i18n::tr(&app.ui.language, "Preflight Panel..."))).clicked() {
+                        let _ = app.run("window.panel", json!({"panel": "preflight"}));
+                        ui.close();
+                    }
+                });
                 ui.add_space(8.0);
                 // Preflight: live issues check.
                 let issues = designcraft_engine::cmd::preflight::check(&app.session, 150.0);
@@ -661,11 +658,7 @@ pub fn status_bar(app: &mut DesignApp, ui: &mut egui::Ui) {
                                 }
                             }
                             if issues.len() > 12 {
-                                ui.label(
-                                    egui::RichText::new(format!("... y {} más", issues.len() - 12))
-                                        .font(small.clone())
-                                        .color(t.text_dim),
-                                );
+                                ui.label(egui::RichText::new(format!("... y {} más", issues.len() - 12)).font(small.clone()).color(t.text_dim));
                             }
                         });
                     }
