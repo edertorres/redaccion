@@ -391,6 +391,16 @@ impl Tokens {
             hex(0x176332)
         }
     }
+
+    pub fn copyfit_warn(self) -> Color32 {
+        if self.text == Color32::WHITE && self.panel == Color32::BLACK {
+            hex(0xffd700)
+        } else if self.dark {
+            hex(0xffd166)
+        } else {
+            hex(0xb26b00)
+        }
+    }
 }
 
 #[cfg(test)]

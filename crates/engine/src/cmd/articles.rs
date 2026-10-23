@@ -420,9 +420,62 @@ pub(crate) fn story_frame_name(doc: &designcraft_doc::Document, sid: designcraft
     format!("Story #{}", sid.0)
 }
 
+pub(crate) fn compute_story_slack(cs: &designcraft_compose::ComposedStory) -> (usize, f64) {
+    if cs.frames.is_empty() {
+        return (0, 0.0);
+    }
+    let last_fi = cs.frames.iter().rposition(|ft| !ft.lines.is_empty());
+    let Some(lfi) = last_fi else {
+        let mut total_h = 0.0;
+        for ft in &cs.frames {
+            for col in &ft.columns {
+                total_h += col.height().max(0.0);
+            }
+        }
+        let lines = (total_h / 12.0).round() as usize;
+        return (lines, total_h);
+    };
+
+    let ft = &cs.frames[lfi];
+    let Some(last_line) = ft.lines.last() else {
+        return (0, 0.0);
+    };
+
+    let last_col = last_line.column as usize;
+    let mut slack = 0.0;
+
+    if let Some(col) = ft.columns.get(last_col) {
+        let bottom = last_line.baseline + last_line.descent;
+        slack += (col.y1 - bottom).max(0.0);
+    }
+    for col in ft.columns.iter().skip(last_col + 1) {
+        slack += col.height().max(0.0);
+    }
+    for next_ft in cs.frames.iter().skip(lfi + 1) {
+        for col in &next_ft.columns {
+            slack += col.height().max(0.0);
+        }
+    }
+
+    let lead = if last_line.leading > 1.0 { last_line.leading } else { (last_line.ascent + last_line.descent).max(10.0) };
+    let lines = (slack / lead).floor() as usize;
+    (lines, slack)
+}
+
 pub(crate) fn compute_copyfit(doc: &designcraft_doc::Document, cs: &designcraft_compose::ComposedStory, sid: designcraft_doc::StoryId) -> Value {
     let Some(st) = doc.story(sid) else {
-        return json!({"id": sid.0, "name": format!("Story #{}", sid.0), "words": 0, "chars": 0, "lines": 0, "overset": false, "overflowLines": 0});
+        return json!({
+            "id": sid.0,
+            "name": format!("Story #{}", sid.0),
+            "words": 0,
+            "chars": 0,
+            "lines": 0,
+            "overset": false,
+            "overflowLines": 0,
+            "underflowLines": 0,
+            "slackPoints": 0.0,
+            "status": "fitted"
+        });
     };
     let overset = cs.overset_at.is_some();
     let overflow_lines = if let Some(o) = cs.overset_at {
@@ -430,6 +483,14 @@ pub(crate) fn compute_copyfit(doc: &designcraft_doc::Document, cs: &designcraft_
         (overset_str.matches('\n').count() + (overset_str.chars().count() / 45)).max(1)
     } else {
         0
+    };
+    let (underflow_lines, slack_points) = if overset { (0, 0.0) } else { compute_story_slack(cs) };
+    let status = if overset {
+        "overset"
+    } else if underflow_lines >= 1 {
+        "underset"
+    } else {
+        "fitted"
     };
     json!({
         "id": sid.0,
@@ -439,6 +500,9 @@ pub(crate) fn compute_copyfit(doc: &designcraft_doc::Document, cs: &designcraft_
         "lines": cs.line_count(),
         "overset": overset,
         "overflowLines": overflow_lines,
+        "underflowLines": underflow_lines,
+        "slackPoints": (slack_points * 10.0).round() / 10.0,
+        "status": status,
     })
 }
 
@@ -551,15 +615,19 @@ mod tests {
         assert_eq!(get["text"], "Texto inicial");
         assert_eq!(get["name"], "Cuerpo");
         assert_eq!(get["copyfit"]["words"], 2);
+        assert_eq!(get["copyfit"]["status"], "underset");
+        assert!(get["copyfit"]["underflowLines"].as_u64().unwrap() >= 1);
 
         // story.update
         let upd = s.execute("story.update", &json!({"story": sid, "text": "Nuevo contenido ampliado para el redactor"})).unwrap();
         assert_eq!(upd["ok"], true);
         assert_eq!(upd["story"], sid);
         assert_eq!(upd["copyfit"]["words"], 6);
+        assert_eq!(upd["copyfit"]["status"], "underset");
 
         // verify updated text via story.get
         let get2 = s.execute("story.get", &json!({"story": sid})).unwrap();
         assert_eq!(get2["text"], "Nuevo contenido ampliado para el redactor");
+        assert_eq!(get2["copyfit"]["status"], "underset");
     }
 }

@@ -2943,6 +2943,22 @@ const TABLE: &[(&str, [&str; 5])] = &[
     ),
     ("Fits frame", ["Passt in den Rahmen", "Tient dans le bloc", "Cabe en el marco", "フレームに収まっています", "适合框架"]),
     (
+        "Underset (empty space)",
+        ["Untersatz (Leerraum)", "Sous-calibrage (espace vide)", "Hueco (falta texto)", "アンダーセット（余白）", "文字不足（留白）"],
+    ),
+    ("lines needed", ["Zeilen fehlen", "lignes manquantes", "líneas faltantes", "行不足", "缺少行"]),
+    (
+        "Empty space: ~{lines} lines needed to fill frame",
+        [
+            "Leerraum: ~{lines} Zeilen fehlen zum Rahmenabschluss",
+            "Espace vide : ~{lines} lignes manquantes pour remplir le bloc",
+            "Hueco: faltan ~{lines} líneas para llenar el marco",
+            "余白：枠を埋めるのに約{lines}行不足",
+            "留白：需约{lines}行填满框架",
+        ],
+    ),
+    ("Filled / closed", ["Ausgefüllt / geschlossen", "Rempli / fermé", "Marco ajustado / lleno", "充填済み / 完了", "已填满 / 闭合"]),
+    (
         "{words} words, {chars} characters",
         [
             "{words} Wörter, {chars} Zeichen",

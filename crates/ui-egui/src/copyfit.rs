@@ -10,8 +10,51 @@ use crate::{DesignApp, ScreenMode, theme::Tokens};
 struct Status {
     story: StoryId,
     label: String,
-    /// None means no overset, not that the frame is exactly full.
+    /// None means no overset.
     overflow_chars: Option<usize>,
+    underflow_lines: usize,
+}
+
+pub(crate) fn compute_story_slack(cs: &designcraft_compose::ComposedStory) -> (usize, f64) {
+    if cs.frames.is_empty() {
+        return (0, 0.0);
+    }
+    let last_fi = cs.frames.iter().rposition(|ft| !ft.lines.is_empty());
+    let Some(lfi) = last_fi else {
+        let mut total_h = 0.0;
+        for ft in &cs.frames {
+            for col in &ft.columns {
+                total_h += col.height().max(0.0);
+            }
+        }
+        let lines = (total_h / 12.0).round() as usize;
+        return (lines, total_h);
+    };
+
+    let ft = &cs.frames[lfi];
+    let Some(last_line) = ft.lines.last() else {
+        return (0, 0.0);
+    };
+
+    let last_col = last_line.column as usize;
+    let mut slack = 0.0;
+
+    if let Some(col) = ft.columns.get(last_col) {
+        let bottom = last_line.baseline + last_line.descent;
+        slack += (col.y1 - bottom).max(0.0);
+    }
+    for col in ft.columns.iter().skip(last_col + 1) {
+        slack += col.height().max(0.0);
+    }
+    for next_ft in cs.frames.iter().skip(lfi + 1) {
+        for col in &next_ft.columns {
+            slack += col.height().max(0.0);
+        }
+    }
+
+    let lead = if last_line.leading > 1.0 { last_line.leading } else { (last_line.ascent + last_line.descent).max(10.0) };
+    let lines = (slack / lead).floor() as usize;
+    (lines, slack)
 }
 
 fn status(app: &DesignApp) -> Option<Status> {
@@ -34,7 +77,8 @@ fn status(app: &DesignApp) -> Option<Status> {
         // Defensive boundary handling also covers malformed offsets without slicing panics.
         story.text.char_indices().skip_while(|(byte, _)| *byte < at).count()
     });
-    Some(Status { story: sid, label: crate::story_editor::story_display_label(&st.doc, sid), overflow_chars })
+    let underflow_lines = if overflow_chars.is_some() { 0 } else { compute_story_slack(&cs).0 };
+    Some(Status { story: sid, label: crate::story_editor::story_display_label(&st.doc, sid), overflow_chars, underflow_lines })
 }
 
 pub(crate) fn show(app: &mut DesignApp, ui: &mut egui::Ui) {
@@ -53,14 +97,20 @@ pub(crate) fn show(app: &mut DesignApp, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             crate::rtl::label(ui, egui::RichText::new(tr("Copyfit")).strong());
             if let Some(current) = &current {
-                let (text, color) = match current.overflow_chars {
+                let (dot, text, color) = match current.overflow_chars {
                     Some(chars) => (
+                        "🔴",
                         format!("! {} · {}", tr("Text doesn't fit"), tr("{chars} characters don't fit").replace("{chars}", &chars.to_string())),
                         t.copyfit_error(),
                     ),
-                    None => (format!("✓ {}", tr("Fits frame")), t.copyfit_ok()),
+                    None if current.underflow_lines >= 1 => (
+                        "🟡",
+                        format!("⚡ {} (~{} {})", tr("Underset (empty space)"), current.underflow_lines, tr("lines needed"),),
+                        t.copyfit_warn(),
+                    ),
+                    None => ("🟢", format!("✓ {}", tr("Fits frame")), t.copyfit_ok()),
                 };
-                crate::rtl::label(ui, egui::RichText::new(text).strong().color(color));
+                crate::rtl::label(ui, egui::RichText::new(format!("{dot} {text}")).strong().color(color));
                 if ui.button(crate::rtl::widget(ui, tr("Edit in Story Editor"))).clicked() {
                     open = Some(current.story);
                 }
@@ -194,5 +244,29 @@ mod tests {
             harness.get_by_label("Edit in Story Editor");
             assert!(std::sync::Arc::ptr_eq(&before, &harness.state().session.active().unwrap().doc));
         }
+    }
+
+    #[test]
+    fn copyfit_three_state_traffic_light() {
+        // State 1: Yellow / Underset (empty frame or short text)
+        let (mut app, frame) = app_with_frame("Una linea");
+        let st_yellow = status(&app).unwrap();
+        assert_eq!(st_yellow.overflow_chars, None);
+        assert!(st_yellow.underflow_lines >= 1, "short text in 80pt frame must report underflow lines >= 1");
+
+        // State 2: Red / Overset (too much text)
+        let long = "Demasiado texto para caber en este marco de ochenta puntos. ".repeat(30);
+        app.run("story.update", json!({"story": frame["story"], "text": long})).unwrap();
+        app.run("selection.set", json!({"ids": [frame["id"]]})).unwrap();
+        let st_red = status(&app).unwrap();
+        assert!(st_red.overflow_chars.is_some(), "long text must report overflow chars");
+        assert_eq!(st_red.underflow_lines, 0);
+
+        // State 3: Green / Fitted (tuned text filling the frame)
+        let tuned = "Linea 1.\nLinea 2.";
+        app.run("story.update", json!({"story": frame["story"], "text": tuned})).unwrap();
+        let st_green = status(&app).unwrap();
+        assert_eq!(st_green.overflow_chars, None);
+        assert_eq!(st_green.underflow_lines, 0, "fitted text filling frame capacity must report underflow == 0");
     }
 }

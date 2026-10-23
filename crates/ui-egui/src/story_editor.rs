@@ -174,30 +174,10 @@ fn show_inner(app: &mut DesignApp, ui: &mut egui::Ui) {
     // Real-time Copyfit & Overset Banner (sticky at the top of the editor)
     let words_count = story.text.split_whitespace().count();
     let chars_count = story.text.chars().count();
-    ui.horizontal(|ui| match overset {
-        None => {
-            egui::Frame::NONE
-                .fill(egui::Color32::from_rgb(25, 75, 38))
-                .corner_radius(4.0)
-                .inner_margin(egui::Margin { left: 8, right: 8, top: 4, bottom: 4 })
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("✓").color(egui::Color32::from_rgb(100, 240, 140)).strong());
-                        ui.label(egui::RichText::new(crate::i18n::tr(&app.ui.language, "Fits frame")).color(egui::Color32::WHITE).strong());
-                        ui.add_space(6.0);
-                        ui.label(
-                            egui::RichText::new(
-                                crate::i18n::tr(&app.ui.language, "{words} words, {chars} characters")
-                                    .replace("{words}", &words_count.to_string())
-                                    .replace("{chars}", &chars_count.to_string()),
-                            )
-                            .color(egui::Color32::from_rgb(190, 230, 205))
-                            .size(11.5),
-                        );
-                    });
-                });
-        }
-        Some(o) => {
+    let (underflow_lines, _) = crate::copyfit::compute_story_slack(&cs);
+
+    ui.horizontal(|ui| {
+        if let Some(o) = overset {
             let o_safe = safe_char_boundary(&story.text, o);
             let overset_str = story.text.get(o_safe..).unwrap_or("");
             let chars_overset = overset_str.chars().count();
@@ -209,7 +189,7 @@ fn show_inner(app: &mut DesignApp, ui: &mut egui::Ui) {
                 .inner_margin(egui::Margin { left: 8, right: 8, top: 4, bottom: 4 })
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("⚠").color(egui::Color32::from_rgb(255, 130, 130)).strong());
+                        ui.label(egui::RichText::new("🔴").strong());
                         ui.label(egui::RichText::new(crate::i18n::tr(&app.ui.language, "OVERSET")).color(egui::Color32::WHITE).strong());
                         ui.add_space(6.0);
                         ui.label(
@@ -220,6 +200,59 @@ fn show_inner(app: &mut DesignApp, ui: &mut egui::Ui) {
                             )
                             .color(egui::Color32::from_rgb(255, 210, 210))
                             .strong(),
+                        );
+                    });
+                });
+        } else if underflow_lines >= 1 {
+            egui::Frame::NONE
+                .fill(egui::Color32::from_rgb(130, 85, 15))
+                .corner_radius(4.0)
+                .inner_margin(egui::Margin { left: 8, right: 8, top: 4, bottom: 4 })
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("🟡").strong());
+                        ui.label(
+                            egui::RichText::new(crate::i18n::tr(&app.ui.language, "Underset (empty space)")).color(egui::Color32::WHITE).strong(),
+                        );
+                        ui.add_space(6.0);
+                        ui.label(
+                            egui::RichText::new(
+                                crate::i18n::tr(&app.ui.language, "Empty space: ~{lines} lines needed to fill frame")
+                                    .replace("{lines}", &underflow_lines.to_string()),
+                            )
+                            .color(egui::Color32::from_rgb(255, 235, 170))
+                            .strong(),
+                        );
+                        ui.add_space(6.0);
+                        ui.label(
+                            egui::RichText::new(
+                                crate::i18n::tr(&app.ui.language, "{words} words, {chars} characters")
+                                    .replace("{words}", &words_count.to_string())
+                                    .replace("{chars}", &chars_count.to_string()),
+                            )
+                            .color(egui::Color32::from_rgb(240, 220, 160))
+                            .size(11.5),
+                        );
+                    });
+                });
+        } else {
+            egui::Frame::NONE
+                .fill(egui::Color32::from_rgb(25, 75, 38))
+                .corner_radius(4.0)
+                .inner_margin(egui::Margin { left: 8, right: 8, top: 4, bottom: 4 })
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("🟢").strong());
+                        ui.label(egui::RichText::new(crate::i18n::tr(&app.ui.language, "Fits frame")).color(egui::Color32::WHITE).strong());
+                        ui.add_space(6.0);
+                        ui.label(
+                            egui::RichText::new(
+                                crate::i18n::tr(&app.ui.language, "{words} words, {chars} characters")
+                                    .replace("{words}", &words_count.to_string())
+                                    .replace("{chars}", &chars_count.to_string()),
+                            )
+                            .color(egui::Color32::from_rgb(190, 230, 205))
+                            .size(11.5),
                         );
                     });
                 });
