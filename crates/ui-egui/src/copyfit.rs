@@ -6,79 +6,112 @@ use serde_json::json;
 
 use crate::{DesignApp, ScreenMode, theme::Tokens};
 
+pub use designcraft_engine::cmd::articles::compute_story_slack;
+
 #[derive(Debug, PartialEq, Eq)]
-struct Status {
-    story: StoryId,
-    label: String,
+pub(crate) struct Status {
+    pub(crate) story: StoryId,
+    pub(crate) label: String,
     /// None means no overset.
-    overflow_chars: Option<usize>,
-    underflow_lines: usize,
-}
-
-pub(crate) fn compute_story_slack(cs: &designcraft_compose::ComposedStory) -> (usize, f64) {
-    if cs.frames.is_empty() {
-        return (0, 0.0);
-    }
-    let last_fi = cs.frames.iter().rposition(|ft| !ft.lines.is_empty());
-    let Some(lfi) = last_fi else {
-        let mut total_h = 0.0;
-        for ft in &cs.frames {
-            for col in &ft.columns {
-                total_h += col.height().max(0.0);
-            }
-        }
-        let lines = (total_h / 12.0).round() as usize;
-        return (lines, total_h);
-    };
-
-    let ft = &cs.frames[lfi];
-    let Some(last_line) = ft.lines.last() else {
-        return (0, 0.0);
-    };
-
-    let last_col = last_line.column as usize;
-    let mut slack = 0.0;
-
-    if let Some(col) = ft.columns.get(last_col) {
-        let bottom = last_line.baseline + last_line.descent;
-        slack += (col.y1 - bottom).max(0.0);
-    }
-    for col in ft.columns.iter().skip(last_col + 1) {
-        slack += col.height().max(0.0);
-    }
-    for next_ft in cs.frames.iter().skip(lfi + 1) {
-        for col in &next_ft.columns {
-            slack += col.height().max(0.0);
-        }
-    }
-
-    let lead = if last_line.leading > 1.0 { last_line.leading } else { (last_line.ascent + last_line.descent).max(10.0) };
-    let lines = (slack / lead).floor() as usize;
-    (lines, slack)
+    pub(crate) overflow_chars: Option<usize>,
+    pub(crate) overflow_lines: usize,
+    pub(crate) underflow_lines: usize,
+    /// If a specific frame is selected in a threaded story: Some((frame_1_based_index, total_frames))
+    pub(crate) frame_pos: Option<(usize, usize)>,
+    pub(crate) flows_to_next: bool,
+    pub(crate) is_empty_frame: bool,
+    pub(crate) empty_frames_after: usize,
+    pub(crate) total_story_underflow: usize,
 }
 
 fn status(app: &DesignApp) -> Option<Status> {
     let st = app.session.active()?;
     // The canvas follows its own selection, even when the story editor shows another story.
     // Multiple selected frames are unambiguous only when they share the same story.
-    let sid = if let Some(text) = st.selection.text {
-        text.story
+    let (sid, selected_item_id) = if let Some(text) = &st.selection.text {
+        let cs = app.session.cache.get(&st.doc, text.story, None);
+        let frame_id = cs.frames.iter().find(|ft| ft.range.contains(&text.anchor) || (ft.range.is_empty() && text.anchor == 0)).map(|ft| ft.frame);
+        (text.story, frame_id)
     } else {
-        let mut stories = st.selection.items.iter().map(|id| st.doc.item(*id)?.text_frame().map(|tf| tf.story));
-        let first = stories.next()??;
-        if !stories.all(|sid| sid == Some(first)) {
+        let mut stories = st.selection.items.iter().filter_map(|id| {
+            let tf = st.doc.item(*id)?.text_frame()?;
+            Some((tf.story, *id))
+        });
+        let first = stories.next()?;
+        let mut all_same = true;
+        for (s, _) in stories {
+            if s != first.0 {
+                all_same = false;
+                break;
+            }
+        }
+        if !all_same {
             return None;
         }
-        first
+        let sel_item = if st.selection.items.len() == 1 { Some(st.selection.items[0]) } else { None };
+        (first.0, sel_item)
     };
+
     let story = st.doc.story(sid)?;
     let cs = app.session.cache.get(&st.doc, sid, None);
+    let total_frames = cs.frames.len();
+    let selected_frame_idx = selected_item_id.and_then(|fid| cs.frames.iter().position(|ft| ft.frame == fid));
+    let frame_pos = selected_frame_idx.map(|idx| (idx + 1, total_frames));
+
     let overflow_chars = cs.overset_at.map(|at| {
         // Defensive boundary handling also covers malformed offsets without slicing panics.
         story.text.char_indices().skip_while(|(byte, _)| *byte < at).count()
     });
-    let underflow_lines = if overflow_chars.is_some() { 0 } else { compute_story_slack(&cs).0 };
-    Some(Status { story: sid, label: crate::story_editor::story_display_label(&st.doc, sid), overflow_chars, underflow_lines })
+    let overflow_lines =
+        if let Some(at) = cs.overset_at { designcraft_engine::cmd::articles::estimate_overflow_lines(&cs, &story.text, at) } else { 0 };
+    let (total_story_underflow, _) = designcraft_engine::cmd::articles::compute_story_slack(&cs);
+
+    let mut flows_to_next = false;
+    let mut is_empty_frame = false;
+    let mut empty_frames_after = 0;
+    let underflow_lines;
+
+    if let Some(idx) = selected_frame_idx {
+        if overflow_chars.is_some() {
+            underflow_lines = 0;
+        } else {
+            let ft = cs.frames.get(idx)?;
+            let lead_fallback = ft.lines.last().map(|l| if l.leading > 1.0 { l.leading } else { 14.4 }).unwrap_or(14.4);
+            if ft.lines.is_empty() {
+                is_empty_frame = true;
+                let (f_lines, _) = designcraft_engine::cmd::articles::compute_frame_slack(ft, lead_fallback);
+                underflow_lines = f_lines;
+            } else {
+                let has_subsequent_lines = cs.frames.iter().skip(idx + 1).any(|f| !f.lines.is_empty());
+                if has_subsequent_lines {
+                    flows_to_next = true;
+                    underflow_lines = 0;
+                } else {
+                    let (f_lines, _) = designcraft_engine::cmd::articles::compute_frame_slack(ft, lead_fallback);
+                    underflow_lines = f_lines;
+                    empty_frames_after = total_frames.saturating_sub(idx + 1);
+                }
+            }
+        }
+    } else {
+        underflow_lines = if overflow_chars.is_some() { 0 } else { total_story_underflow };
+        if let Some(lfi) = cs.frames.iter().rposition(|ft| !ft.lines.is_empty()) {
+            empty_frames_after = total_frames.saturating_sub(lfi + 1);
+        }
+    }
+
+    Some(Status {
+        story: sid,
+        label: crate::story_editor::story_display_label(&st.doc, sid),
+        overflow_chars,
+        overflow_lines,
+        underflow_lines,
+        frame_pos,
+        flows_to_next,
+        is_empty_frame,
+        empty_frames_after,
+        total_story_underflow,
+    })
 }
 
 pub(crate) fn show(app: &mut DesignApp, ui: &mut egui::Ui) {
@@ -97,18 +130,71 @@ pub(crate) fn show(app: &mut DesignApp, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             crate::rtl::label(ui, egui::RichText::new(tr("Copyfit")).strong());
             if let Some(current) = &current {
+                let frame_prefix = if let Some((curr, tot)) = current.frame_pos {
+                    if tot > 1 {
+                        format!("{}: ", tr("Frame {current}/{total}").replace("{current}", &curr.to_string()).replace("{total}", &tot.to_string()))
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    String::new()
+                };
+
                 let (dot, text, color) = match current.overflow_chars {
-                    Some(chars) => (
-                        "🔴",
-                        format!("! {} · {}", tr("Text doesn't fit"), tr("{chars} characters don't fit").replace("{chars}", &chars.to_string())),
-                        t.copyfit_error(),
-                    ),
-                    None if current.underflow_lines >= 1 => (
+                    Some(chars) => {
+                        let lines_txt = if current.overflow_lines == 1 {
+                            tr("1 line doesn't fit").to_string()
+                        } else {
+                            tr("{lines} lines don't fit").replace("{lines}", &current.overflow_lines.to_string())
+                        };
+                        (
+                            "🔴",
+                            format!("! {frame_prefix}{} · {lines_txt}", tr("{chars} characters don't fit").replace("{chars}", &chars.to_string())),
+                            t.copyfit_error(),
+                        )
+                    }
+                    None if current.flows_to_next => ("🟢", format!("✓ {frame_prefix}{}", tr("Text flows to next frame")), t.copyfit_ok()),
+                    None if current.is_empty_frame => (
                         "🟡",
-                        format!("⚡ {} (~{} {})", tr("Underset (empty space)"), current.underflow_lines, tr("lines needed"),),
+                        format!("⚡ {frame_prefix}{} (~{} {})", tr("Empty frame"), current.underflow_lines, tr("lines capacity")),
                         t.copyfit_warn(),
                     ),
-                    None => ("🟢", format!("✓ {}", tr("Fits frame")), t.copyfit_ok()),
+                    None if current.underflow_lines >= 1 => {
+                        let msg = if let Some((curr, tot)) = current.frame_pos {
+                            if tot > 1 {
+                                let mut s = tr("Empty space in frame {current}/{total}: ~{lines} lines needed to fill frame")
+                                    .replace("{current}", &curr.to_string())
+                                    .replace("{total}", &tot.to_string())
+                                    .replace("{lines}", &current.underflow_lines.to_string());
+                                if current.empty_frames_after > 0 {
+                                    s.push(' ');
+                                    s.push_str(&tr("(+{count} empty frames follow)").replace("{count}", &current.empty_frames_after.to_string()));
+                                }
+                                s
+                            } else {
+                                format!("{} (~{} {})", tr("Underset (empty space)"), current.underflow_lines, tr("lines needed"))
+                            }
+                        } else {
+                            format!("{} (~{} {})", tr("Underset (empty space)"), current.underflow_lines, tr("lines needed"))
+                        };
+                        ("🟡", format!("⚡ {msg}"), t.copyfit_warn())
+                    }
+                    None => {
+                        let msg = if let Some((_curr, tot)) = current.frame_pos {
+                            if tot > 1 && current.empty_frames_after > 0 {
+                                format!(
+                                    "{frame_prefix}{} {}",
+                                    tr("Fits frame"),
+                                    tr("(+{count} empty frames follow)").replace("{count}", &current.empty_frames_after.to_string())
+                                )
+                            } else {
+                                format!("{frame_prefix}{}", tr("Fits frame"))
+                            }
+                        } else {
+                            tr("Fits frame").to_string()
+                        };
+                        ("🟢", format!("✓ {msg}"), t.copyfit_ok())
+                    }
                 };
                 crate::rtl::label(ui, egui::RichText::new(format!("{dot} {text}")).strong().color(color));
                 if ui.button(crate::rtl::widget(ui, tr("Edit in Story Editor"))).clicked() {
@@ -180,10 +266,58 @@ mod tests {
         let (mut app, first) = app_with_frame(&"Información ".repeat(300));
         let second = app.run("text.thread", json!({"from": first["id"], "rect": [220, 36, 360, 80]})).unwrap();
         let end = status(&app).unwrap();
+        assert_eq!(end.frame_pos, Some((2, 2)));
         app.run("selection.set", json!({"ids": [first["id"]]})).unwrap();
-        assert_eq!(status(&app), Some(end));
+        let first_st = status(&app).unwrap();
+        assert_eq!(first_st.overflow_chars, end.overflow_chars);
+        assert_eq!(first_st.overflow_lines, end.overflow_lines);
+        assert_eq!(first_st.frame_pos, Some((1, 2)));
         app.run("selection.set", json!({"ids": [first["id"], second["to"]]})).unwrap();
         assert!(status(&app).unwrap().overflow_chars.is_some());
+    }
+
+    #[test]
+    fn threaded_story_first_frame_fitted_when_text_continues_to_next() {
+        let text = "Linea 1.\nLinea 2.\nLinea 3.\nLinea 4.\nLinea 5.\nLinea 6.\nLinea 7.\nLinea 8.\nLinea 9.\nLinea 10.";
+        let (mut app, first) = app_with_frame(text);
+        let second = app.run("text.thread", json!({"from": first["id"], "rect": [220, 36, 360, 250]})).unwrap();
+        app.run("selection.set", json!({"ids": [first["id"]]})).unwrap();
+        let st1 = status(&app).unwrap();
+        assert_eq!(st1.frame_pos, Some((1, 2)));
+        assert!(st1.flows_to_next, "Frame 1 must report that text flows to next frame");
+        assert_eq!(st1.underflow_lines, 0, "Frame 1 must not report underflow when text flows out");
+
+        app.run("selection.set", json!({"ids": [second["to"]]})).unwrap();
+        let st2 = status(&app).unwrap();
+        assert_eq!(st2.frame_pos, Some((2, 2)));
+        assert!(!st2.flows_to_next);
+        assert!(st2.underflow_lines >= 1, "Frame 2 has empty space so it reports underflow lines");
+    }
+
+    #[test]
+    fn threaded_story_short_text_reports_only_frame_slack_not_subsequent_empty_frames() {
+        let (mut app, first) = app_with_frame("Solo dos lineas breves.\nAqui termina.");
+        let second = app.run("text.thread", json!({"from": first["id"], "rect": [220, 36, 360, 200]})).unwrap();
+
+        // Select Frame 1: Frame 1 has some empty space, and Frame 2 is completely empty.
+        app.run("selection.set", json!({"ids": [first["id"]]})).unwrap();
+        let st1 = status(&app).unwrap();
+        assert_eq!(st1.frame_pos, Some((1, 2)));
+        assert!(!st1.flows_to_next);
+        assert_eq!(st1.empty_frames_after, 1);
+        // Crucial check: Frame 1 slack must NOT include the empty 200pt Frame 2 (~14 lines)!
+        assert!(
+            st1.underflow_lines <= 4,
+            "Frame 1 must report its own slack (~2-3 lines), not the empty 200pt Frame 2! Got: {}",
+            st1.underflow_lines
+        );
+
+        // Select Frame 2: Frame 2 is empty
+        app.run("selection.set", json!({"ids": [second["to"]]})).unwrap();
+        let st2 = status(&app).unwrap();
+        assert_eq!(st2.frame_pos, Some((2, 2)));
+        assert!(st2.is_empty_frame);
+        assert!(st2.underflow_lines >= 10, "Frame 2 capacity must reflect 200pt frame height");
     }
 
     #[test]
@@ -267,6 +401,6 @@ mod tests {
         app.run("story.update", json!({"story": frame["story"], "text": tuned})).unwrap();
         let st_green = status(&app).unwrap();
         assert_eq!(st_green.overflow_chars, None);
-        assert_eq!(st_green.underflow_lines, 0, "fitted text filling frame capacity must report underflow == 0");
+        assert_eq!(st_green.underflow_lines, 0);
     }
 }

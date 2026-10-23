@@ -2,7 +2,7 @@
 
 mod anchored;
 pub mod anchors;
-mod articles;
+pub mod articles;
 pub mod book;
 mod buttons;
 pub(crate) mod captions;

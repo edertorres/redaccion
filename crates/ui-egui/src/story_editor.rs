@@ -140,7 +140,7 @@ pub(crate) fn story_display_label(doc: &designcraft_doc::Document, sid: designcr
     }
 }
 
-fn safe_char_boundary(s: &str, mut i: usize) -> usize {
+pub(crate) fn safe_char_boundary(s: &str, mut i: usize) -> usize {
     i = i.min(s.len());
     while !s.is_char_boundary(i) {
         i = i.saturating_sub(1);
@@ -181,7 +181,7 @@ fn show_inner(app: &mut DesignApp, ui: &mut egui::Ui) {
             let o_safe = safe_char_boundary(&story.text, o);
             let overset_str = story.text.get(o_safe..).unwrap_or("");
             let chars_overset = overset_str.chars().count();
-            let lines_overset = (overset_str.matches('\n').count() + (chars_overset / 45)).max(1);
+            let lines_overset = designcraft_engine::cmd::articles::estimate_overflow_lines(&cs, &story.text, o);
 
             egui::Frame::NONE
                 .fill(egui::Color32::from_rgb(140, 32, 32))
@@ -204,6 +204,28 @@ fn show_inner(app: &mut DesignApp, ui: &mut egui::Ui) {
                     });
                 });
         } else if underflow_lines >= 1 {
+            let total_frames = cs.frames.len();
+            let lfi = cs.frames.iter().rposition(|ft| !ft.lines.is_empty());
+            let (active_lines, empty_after) = if let Some(fi) = lfi {
+                let lead = cs.frames[fi].lines.last().map(|l| if l.leading > 1.0 { l.leading } else { 14.4 }).unwrap_or(14.4);
+                let (al, _) = designcraft_engine::cmd::articles::compute_frame_slack(&cs.frames[fi], lead);
+                (al, total_frames.saturating_sub(fi + 1))
+            } else {
+                (underflow_lines, 0)
+            };
+
+            let underflow_msg = if total_frames > 1 && empty_after > 0 {
+                let current_frame = lfi.unwrap_or(0) + 1;
+                let frame_part = crate::i18n::tr(&app.ui.language, "Empty space in frame {current}/{total}: ~{lines} lines needed to fill frame")
+                    .replace("{current}", &current_frame.to_string())
+                    .replace("{total}", &total_frames.to_string())
+                    .replace("{lines}", &active_lines.to_string());
+                let empty_part = crate::i18n::tr(&app.ui.language, "(+{count} empty frames follow)").replace("{count}", &empty_after.to_string());
+                format!("{frame_part} {empty_part}")
+            } else {
+                crate::i18n::tr(&app.ui.language, "Empty space: ~{lines} lines needed to fill frame").replace("{lines}", &underflow_lines.to_string())
+            };
+
             egui::Frame::NONE
                 .fill(egui::Color32::from_rgb(130, 85, 15))
                 .corner_radius(4.0)
@@ -215,14 +237,7 @@ fn show_inner(app: &mut DesignApp, ui: &mut egui::Ui) {
                             egui::RichText::new(crate::i18n::tr(&app.ui.language, "Underset (empty space)")).color(egui::Color32::WHITE).strong(),
                         );
                         ui.add_space(6.0);
-                        ui.label(
-                            egui::RichText::new(
-                                crate::i18n::tr(&app.ui.language, "Empty space: ~{lines} lines needed to fill frame")
-                                    .replace("{lines}", &underflow_lines.to_string()),
-                            )
-                            .color(egui::Color32::from_rgb(255, 235, 170))
-                            .strong(),
-                        );
+                        ui.label(egui::RichText::new(underflow_msg).color(egui::Color32::from_rgb(255, 235, 170)).strong());
                         ui.add_space(6.0);
                         ui.label(
                             egui::RichText::new(

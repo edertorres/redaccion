@@ -2957,6 +2957,63 @@ const TABLE: &[(&str, [&str; 5])] = &[
             "留白：需约{lines}行填满框架",
         ],
     ),
+    (
+        "Empty space in frame {current}/{total}: ~{lines} lines needed to fill frame",
+        [
+            "Leerraum in Rahmen {current}/{total}: ~{lines} Zeilen fehlen",
+            "Espace vide dans le bloc {current}/{total} : ~{lines} lignes manquantes",
+            "Hueco en marco {current}/{total}: faltan ~{lines} líneas para llenar el marco",
+            "フレーム {current}/{total}の余白：約{lines}行不足",
+            "框架 {current}/{total} 留白：需约{lines}行填满框架",
+        ],
+    ),
+    (
+        "Frame {current}/{total}",
+        ["Rahmen {current}/{total}", "Bloc {current}/{total}", "Marco {current}/{total}", "フレーム {current}/{total}", "框架 {current}/{total}"],
+    ),
+    ("lines capacity", ["Zeilen Kapazität", "lignes de capacité", "líneas de capacidad", "行の容量", "行容量"]),
+    (
+        "Text flows to next frame",
+        [
+            "Text fließt in nächsten Rahmen",
+            "Le texte continue dans le bloc suivant",
+            "El texto continúa en el marco siguiente",
+            "次のフレームに続いています",
+            "文本流入下一个框架",
+        ],
+    ),
+    ("Empty frame", ["Leerer Rahmen", "Bloc vide", "Marco vacío", "空のフレーム", "空框架"]),
+    (
+        "{lines} lines don't fit",
+        [
+            "~{lines} Zeilen passen nicht",
+            "~{lines} lignes ne rentrent pas",
+            "~{lines} líneas que no caben",
+            "約{lines}行が収まりません",
+            "约{lines}行溢出",
+        ],
+    ),
+    ("1 line doesn't fit", ["1 Zeile passt nicht", "1 ligne ne rentre pas", "1 línea que no cabe", "1行が収まりません", "1行溢出"]),
+    (
+        "(+{count} empty frames follow)",
+        [
+            "(+{count} leere Rahmen folgen)",
+            "(+{count} blocs vides après)",
+            "(+{count} marcos vacíos después)",
+            "（以降に{count}個の空フレーム）",
+            "（后续有{count}个空框架）",
+        ],
+    ),
+    (
+        "All frames filled / closed",
+        [
+            "Alle Rahmen ausgefüllt / geschlossen",
+            "Tous les blocs sont remplis / fermés",
+            "Todos los marcos ajustados y llenos",
+            "全フレーム充填済み / 完了",
+            "所有框架已填满 / 闭合",
+        ],
+    ),
     ("Filled / closed", ["Ausgefüllt / geschlossen", "Rempli / fermé", "Marco ajustado / lleno", "充填済み / 完了", "已填满 / 闭合"]),
     (
         "{words} words, {chars} characters",

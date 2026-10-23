@@ -420,46 +420,119 @@ pub(crate) fn story_frame_name(doc: &designcraft_doc::Document, sid: designcraft
     format!("Story #{}", sid.0)
 }
 
-pub(crate) fn compute_story_slack(cs: &designcraft_compose::ComposedStory) -> (usize, f64) {
+pub fn estimate_overflow_lines(cs: &designcraft_compose::ComposedStory, story_text: &str, overset_byte: usize) -> usize {
+    let o_safe = if overset_byte <= story_text.len() {
+        let mut b = overset_byte;
+        while b > 0 && !story_text.is_char_boundary(b) {
+            b -= 1;
+        }
+        b
+    } else {
+        story_text.len()
+    };
+    let overset_str = story_text.get(o_safe..).unwrap_or("");
+    let overset_chars = overset_str.chars().count();
+    if overset_chars == 0 {
+        return 1;
+    }
+
+    let col_w = cs.frames.iter().flat_map(|f| &f.columns).map(|c| c.width()).find(|w| *w > 10.0).unwrap_or(200.0);
+    let font_size = cs.frames.iter().flat_map(|f| &f.lines).map(|l| l.ascent + l.descent).find(|h| *h > 6.0).unwrap_or(12.0);
+    let char_w = (font_size * 0.50).clamp(4.0, 12.0);
+    let avg_cpl = (col_w / char_w).round().clamp(20.0, 100.0);
+
+    let mut total_lines = 0;
+    for paragraph in overset_str.lines() {
+        let p_chars = paragraph.chars().count();
+        if p_chars == 0 {
+            total_lines += 1;
+        } else {
+            let l = ((p_chars as f64) / avg_cpl).ceil() as usize;
+            total_lines += l.max(1);
+        }
+    }
+    total_lines.max(1)
+}
+
+pub fn compute_frame_slack(ft: &designcraft_compose::FrameText, lead_fallback: f64) -> (usize, f64) {
+    if ft.columns.is_empty() {
+        return (0, 0.0);
+    }
+    let (lead, asc, desc) = if let Some(l) = ft.lines.last() {
+        let lead = if l.leading > 1.0 { l.leading } else { lead_fallback.max(12.0) };
+        (lead, l.ascent.max(8.0), l.descent.max(2.0))
+    } else {
+        (lead_fallback.max(12.0), lead_fallback * 0.75, lead_fallback * 0.25)
+    };
+
+    if ft.lines.is_empty() {
+        let mut total_lines = 0;
+        let mut total_slack = 0.0;
+        for col in &ft.columns {
+            let h = col.height().max(0.0);
+            total_slack += h;
+            if h >= asc + desc {
+                total_lines += 1 + ((h - (asc + desc)) / lead).floor() as usize;
+            }
+        }
+        return (total_lines, total_slack);
+    }
+
+    let Some(last_line) = ft.lines.last() else {
+        return (0, 0.0);
+    };
+
+    let last_col = (last_line.column as usize).min(ft.columns.len().saturating_sub(1));
+    let mut slack = 0.0;
+    let mut lines = 0;
+
+    if let Some(col) = ft.columns.get(last_col) {
+        let bottom = last_line.baseline + last_line.descent;
+        let rem = (col.y1 - bottom).max(0.0);
+        slack += rem;
+        lines += (rem / lead).floor() as usize;
+    }
+
+    for col in ft.columns.iter().skip(last_col + 1) {
+        let h = col.height().max(0.0);
+        slack += h;
+        if h >= asc + desc {
+            lines += 1 + ((h - (asc + desc)) / lead).floor() as usize;
+        }
+    }
+
+    (lines, slack)
+}
+
+pub fn compute_story_slack(cs: &designcraft_compose::ComposedStory) -> (usize, f64) {
     if cs.frames.is_empty() {
         return (0, 0.0);
     }
     let last_fi = cs.frames.iter().rposition(|ft| !ft.lines.is_empty());
     let Some(lfi) = last_fi else {
-        let mut total_h = 0.0;
+        let lead = 14.4;
+        let mut lines = 0;
+        let mut slack = 0.0;
         for ft in &cs.frames {
-            for col in &ft.columns {
-                total_h += col.height().max(0.0);
-            }
+            let (f_lines, f_slack) = compute_frame_slack(ft, lead);
+            lines += f_lines;
+            slack += f_slack;
         }
-        let lines = (total_h / 12.0).round() as usize;
-        return (lines, total_h);
+        return (lines, slack);
     };
 
-    let ft = &cs.frames[lfi];
-    let Some(last_line) = ft.lines.last() else {
-        return (0, 0.0);
-    };
+    let lead = cs.frames[lfi].lines.last().map(|l| if l.leading > 1.0 { l.leading } else { 14.4 }).unwrap_or(14.4);
 
-    let last_col = last_line.column as usize;
-    let mut slack = 0.0;
-
-    if let Some(col) = ft.columns.get(last_col) {
-        let bottom = last_line.baseline + last_line.descent;
-        slack += (col.y1 - bottom).max(0.0);
-    }
-    for col in ft.columns.iter().skip(last_col + 1) {
-        slack += col.height().max(0.0);
-    }
+    let (active_frame_lines, active_frame_slack) = compute_frame_slack(&cs.frames[lfi], lead);
+    let mut remaining_frames_lines = 0;
+    let mut remaining_frames_slack = 0.0;
     for next_ft in cs.frames.iter().skip(lfi + 1) {
-        for col in &next_ft.columns {
-            slack += col.height().max(0.0);
-        }
+        let (f_lines, f_slack) = compute_frame_slack(next_ft, lead);
+        remaining_frames_lines += f_lines;
+        remaining_frames_slack += f_slack;
     }
 
-    let lead = if last_line.leading > 1.0 { last_line.leading } else { (last_line.ascent + last_line.descent).max(10.0) };
-    let lines = (slack / lead).floor() as usize;
-    (lines, slack)
+    (active_frame_lines + remaining_frames_lines, active_frame_slack + remaining_frames_slack)
 }
 
 pub(crate) fn compute_copyfit(doc: &designcraft_doc::Document, cs: &designcraft_compose::ComposedStory, sid: designcraft_doc::StoryId) -> Value {
@@ -478,12 +551,7 @@ pub(crate) fn compute_copyfit(doc: &designcraft_doc::Document, cs: &designcraft_
         });
     };
     let overset = cs.overset_at.is_some();
-    let overflow_lines = if let Some(o) = cs.overset_at {
-        let overset_str = &st.text[o.min(st.text.len())..];
-        (overset_str.matches('\n').count() + (overset_str.chars().count() / 45)).max(1)
-    } else {
-        0
-    };
+    let overflow_lines = if let Some(o) = cs.overset_at { estimate_overflow_lines(cs, &st.text, o) } else { 0 };
     let (underflow_lines, slack_points) = if overset { (0, 0.0) } else { compute_story_slack(cs) };
     let status = if overset {
         "overset"
@@ -629,5 +697,24 @@ mod tests {
         let get2 = s.execute("story.get", &json!({"story": sid})).unwrap();
         assert_eq!(get2["text"], "Nuevo contenido ampliado para el redactor");
         assert_eq!(get2["copyfit"]["status"], "underset");
+    }
+
+    #[test]
+    fn copyfit_slack_and_overflow_estimation() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({})).unwrap();
+        // Frame of height 200 pt
+        let f1 = s.execute("frame.create", &json!({"rect": [72, 72, 300, 272], "content": "text", "text": "Linea 1\nLinea 2"})).unwrap();
+        let sid = designcraft_doc::StoryId(f1["story"].as_u64().unwrap());
+        let doc = s.doc().unwrap();
+        let cs = s.cache.get(&doc.doc, sid, None);
+        let (lines, slack) = super::compute_story_slack(&cs);
+        assert!(lines >= 8, "2 short lines in 200pt frame should leave ~9-11 lines slack, got {lines}");
+        assert!(slack > 100.0);
+
+        // Estimate overflow lines
+        let short_text = "Linea corta.\n".repeat(10);
+        let ov_lines = super::estimate_overflow_lines(&cs, &short_text, 0);
+        assert_eq!(ov_lines, 10);
     }
 }
