@@ -242,7 +242,7 @@ impl Default for UiState {
             separation: None,
             ink_limit: None,
             display_quality: designcraft_render::DisplayQuality::High,
-            ui_scale: 1.6,
+            ui_scale: 1.0,
             rich_black: false,
             overprint_preview: false,
             shortcuts: Default::default(),
@@ -657,6 +657,19 @@ impl DesignApp {
                     }
                 }
                 self.status(format!("Loaded bullet graphic: {bullet_name}"));
+                continue;
+            }
+            if let Some(rest) = name.strip_prefix("relink:") {
+                let (aid_str, raw_name) = rest.split_once(':').unwrap_or((rest, "image"));
+                if let Ok(aid) = aid_str.parse::<u64>() {
+                    let b64 = designcraft_engine::cmd::base64_encode(&bytes);
+                    let res = self.run("links.replaceData", json!({"asset": aid, "base64": b64, "name": raw_name}));
+                    if res.is_ok() {
+                        self.status(format!("Relinked {raw_name}"));
+                    } else if let Err(e) = res {
+                        self.status(format!("Relink failed: {e}"));
+                    }
+                }
                 continue;
             }
             if let Some(style_name) = name.strip_prefix("styles:") {

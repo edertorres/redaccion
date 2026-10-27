@@ -2098,26 +2098,114 @@ pub fn links_panel(app: &mut DesignApp, ui: &mut egui::Ui) {
         crate::rtl::label(ui, egui::RichText::new(crate::i18n::tr(&app.ui.language, "No placed graphics.")).color(t.text_dim));
         return;
     }
+
+    let mut total_bytes: usize = 0;
+    let mut unused_count: usize = 0;
+    let mut unused_bytes: usize = 0;
+    for r in &rows {
+        let sz = r["size"].as_u64().unwrap_or(0) as usize;
+        total_bytes += sz;
+        if r["used"].as_bool() == Some(false) {
+            unused_count += 1;
+            unused_bytes += sz;
+        }
+    }
+
+    let total_str = if total_bytes < 1024 * 1024 {
+        format!("{:.1} KB", total_bytes as f64 / 1024.0)
+    } else {
+        format!("{:.1} MB", total_bytes as f64 / (1024.0 * 1024.0))
+    };
+
+    ui.horizontal(|ui| {
+        crate::rtl::label(
+            ui,
+            egui::RichText::new(format!("{} assets · Total: {}", rows.len(), total_str))
+                .size(11.0)
+                .color(t.text_dim),
+        );
+    });
+
+    if unused_count > 0 {
+        ui.add_space(2.0);
+        let unused_str = if unused_bytes < 1024 * 1024 {
+            format!("{:.1} KB", unused_bytes as f64 / 1024.0)
+        } else {
+            format!("{:.1} MB", unused_bytes as f64 / (1024.0 * 1024.0))
+        };
+        egui::Frame::NONE
+            .fill(egui::Color32::from_rgba_premultiplied(230, 160, 40, 30))
+            .stroke(Stroke::new(1.0, egui::Color32::from_rgb(230, 160, 40)))
+            .corner_radius(4.0)
+            .inner_margin(egui::Margin::symmetric(6, 4))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!("⚠ {unused_count} unused ({unused_str})"))
+                            .size(11.0)
+                            .color(egui::Color32::from_rgb(230, 160, 40)),
+                    );
+                    if ui.small_button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Purge Unused"))).clicked() {
+                        let res = app.run("links.purgeUnused", json!({}));
+                        if let Ok(v) = res {
+                            let p = v["purged"].as_u64().unwrap_or(0);
+                            let b = v["bytesFreed"].as_u64().unwrap_or(0) as f64 / (1024.0 * 1024.0);
+                            app.status(format!("Purged {p} unused asset(s) ({b:.1} MB freed)"));
+                        }
+                    }
+                });
+            });
+        ui.add_space(2.0);
+    }
+
     let sel_key = egui::Id::new("links_panel_sel");
     let mut chosen: Option<u64> = ui.data(|d| d.get_temp(sel_key));
-    egui::Grid::new("links_grid").num_columns(3).striped(true).spacing([10.0, 4.0]).show(ui, |ui| {
+
+    egui::Grid::new("links_grid").num_columns(4).striped(true).spacing([8.0, 4.0]).show(ui, |ui| {
         crate::rtl::label(ui, egui::RichText::new(crate::i18n::tr(&app.ui.language, "Name")).color(t.text_dim).size(11.0));
+        crate::rtl::label(ui, egui::RichText::new(crate::i18n::tr(&app.ui.language, "Size")).color(t.text_dim).size(11.0));
         crate::rtl::label(ui, egui::RichText::new(crate::i18n::tr(&app.ui.language, "Status")).color(t.text_dim).size(11.0));
         crate::rtl::label(ui, egui::RichText::new(crate::i18n::tr(&app.ui.language, "Page · PPI")).color(t.text_dim).size(11.0));
         ui.end_row();
+
         for r in &rows {
             let aid = r["asset"].as_u64().unwrap_or(0);
             let name = r["name"].as_str().unwrap_or("");
-            if ui.selectable_label(chosen == Some(aid), name).clicked() {
+            let sz = r["size"].as_u64().unwrap_or(0) as usize;
+            let sz_str = r["sizeFormatted"].as_str().unwrap_or("");
+            let is_used = r["used"].as_bool().unwrap_or(true);
+
+            let label_name = if name.chars().count() > 18 {
+                let s: String = name.chars().take(17).collect();
+                format!("{s}…")
+            } else {
+                name.to_string()
+            };
+            if ui.selectable_label(chosen == Some(aid), label_name).on_hover_text(name).clicked() {
                 chosen = Some(aid);
             }
-            let (txt, col) = match r["status"].as_str().unwrap_or("") {
-                "missing" => ("\u{26A0} Missing", egui::Color32::from_rgb(0xe5, 0x4b, 0x4b)),
-                "modified" => ("\u{25B2} Modified", egui::Color32::from_rgb(0xe8, 0xb3, 0x2c)),
-                "embedded" => ("Embedded", t.text_dim),
-                _ => ("OK", t.text_dim),
+
+            let sz_color = if sz > 50 * 1024 * 1024 {
+                egui::Color32::from_rgb(0xe5, 0x4b, 0x4b)
+            } else if sz > 5 * 1024 * 1024 {
+                egui::Color32::from_rgb(0xe8, 0xb3, 0x2c)
+            } else {
+                t.text_dim
             };
-            crate::rtl::label(ui, egui::RichText::new(crate::i18n::tr(&app.ui.language, txt)).color(col).size(11.0));
+            crate::rtl::label(ui, egui::RichText::new(sz_str).color(sz_color).size(10.5));
+
+            let (txt, col) = if !is_used {
+                ("Unused", egui::Color32::from_rgb(0xe8, 0xb3, 0x2c))
+            } else {
+                match r["status"].as_str().unwrap_or("") {
+                    "missing" => ("\u{26A0} Missing", egui::Color32::from_rgb(0xe5, 0x4b, 0x4b)),
+                    "modified" => ("\u{25B2} Modified", egui::Color32::from_rgb(0xe8, 0xb3, 0x2c)),
+                    "embedded" => ("Embedded", t.text_dim),
+                    _ => ("OK", t.text_dim),
+                }
+            };
+            crate::rtl::label(ui, egui::RichText::new(crate::i18n::tr(&app.ui.language, txt)).color(col).size(10.5));
+
             let uses = r["uses"].as_array().cloned().unwrap_or_default();
             let info = match uses.first() {
                 Some(u) => {
@@ -2126,43 +2214,110 @@ pub fn links_panel(app: &mut DesignApp, ui: &mut egui::Ui) {
                     let more = if uses.len() > 1 { format!(" (+{})", uses.len() - 1) } else { String::new() };
                     format!("{page}{ppi}{more}")
                 }
-                None => crate::i18n::tr(&app.ui.language, "unused").into(),
+                None => "—".into(),
             };
-            // Low effective resolution for print is flagged like the Preflight check.
             let low = uses.first().and_then(|u| u["ppi"].as_f64()).is_some_and(|p| p < 150.0);
             crate::rtl::label(
                 ui,
-                egui::RichText::new(info).size(11.0).color(if low { egui::Color32::from_rgb(0xe8, 0xb3, 0x2c) } else { t.text_dim }),
+                egui::RichText::new(info).size(10.5).color(if low { egui::Color32::from_rgb(0xe8, 0xb3, 0x2c) } else { t.text_dim }),
             );
             ui.end_row();
         }
     });
+
     if let Some(c) = chosen {
         ui.data_mut(|d| d.insert_temp(sel_key, c));
     }
+
+    ui.add_space(8.0);
+
+    if let Some(aid) = chosen {
+        if let Some(r) = rows.iter().find(|x| x["asset"] == json!(aid)) {
+            let name = r["name"].as_str().unwrap_or("");
+            let mime = r["mime"].as_str().unwrap_or("");
+            let sz_str = r["sizeFormatted"].as_str().unwrap_or("");
+            let is_used = r["used"].as_bool().unwrap_or(true);
+
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(name).strong().size(11.5));
+                });
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(format!("{mime} · {sz_str}")).size(10.5).color(t.text_dim));
+                    if let Some(px) = r["pixels"].as_array()
+                        && px.len() >= 2
+                    {
+                        ui.label(egui::RichText::new(format!("· {}×{} px", px[0], px[1])).size(10.5).color(t.text_dim));
+                    }
+                });
+                if !is_used {
+                    ui.label(
+                        egui::RichText::new("⚠ Not placed in any frame (can be safely deleted)")
+                            .size(10.5)
+                            .color(egui::Color32::from_rgb(0xe8, 0xb3, 0x2c)),
+                    );
+                } else if let Some(p) = r["path"].as_str() {
+                    ui.label(egui::RichText::new(format!("Link: {p}")).size(10.0).color(t.text_dim));
+                }
+
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    if is_used && ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Go To"))).clicked() {
+                        let _ = app.run("links.goTo", json!({"asset": aid}));
+                    }
+
+                    if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Relink…"))).clicked() {
+                        if let Some(pick) = app.services.pick_open.as_mut() {
+                            if let Some(path) = pick("relink") {
+                                let _ = app.run("links.relink", json!({"asset": aid, "path": path}));
+                            }
+                        } else if let Some(open) = app.services.open_async.as_mut() {
+                            open(&format!("relink:{aid}"));
+                        }
+                    }
+
+                    if ui
+                        .button(
+                            egui::RichText::new(crate::i18n::tr(&app.ui.language, "Delete Asset"))
+                                .color(egui::Color32::from_rgb(0xe5, 0x4b, 0x4b)),
+                        )
+                        .on_hover_text(if is_used {
+                            "Removes the asset and clears the placed graphic from frames"
+                        } else {
+                            "Removes this unused asset from the document to free space"
+                        })
+                        .clicked()
+                    {
+                        let del = app.run("links.delete", json!({"asset": aid}));
+                        if let Ok(v) = del {
+                            let freed_mb = v["bytesFreed"].as_u64().unwrap_or(0) as f64 / (1024.0 * 1024.0);
+                            app.status(format!("Asset deleted ({freed_mb:.1} MB freed)"));
+                        }
+                        chosen = None;
+                        ui.data_mut(|d| d.remove_temp::<u64>(sel_key));
+                    }
+
+                    if r["status"] == "modified" && ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Update"))).clicked() {
+                        let _ = app.run("links.update", json!({"asset": aid}));
+                    }
+
+                    if r["path"].is_string() && ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Embed"))).clicked() {
+                        let _ = app.run("links.embed", json!({"asset": aid}));
+                    }
+                });
+            });
+        }
+    } else {
+        crate::rtl::label(
+            ui,
+            egui::RichText::new(crate::i18n::tr(&app.ui.language, "Choose a link to inspect or manage."))
+                .color(t.text_dim)
+                .size(11.0),
+        );
+    }
+
     ui.add_space(6.0);
     ui.horizontal(|ui| {
-        let Some(aid) = chosen else {
-            crate::rtl::label(ui, egui::RichText::new(crate::i18n::tr(&app.ui.language, "Choose a link.")).color(t.text_dim).size(11.0));
-            return;
-        };
-        if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Relink…"))).clicked()
-            && let Some(path) = app.services.pick_open.as_mut().and_then(|pick| pick("relink"))
-        {
-            let _ = app.run("links.relink", json!({"asset": aid, "path": path}));
-        }
-        if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Go To"))).clicked() {
-            let _ = app.run("links.goTo", json!({"asset": aid}));
-        }
-        if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Update"))).clicked() {
-            let _ = app.run("links.update", json!({"asset": aid}));
-        }
-        if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Embed"))).clicked() {
-            let _ = app.run("links.embed", json!({"asset": aid}));
-        }
-    });
-    ui.horizontal(|ui| {
-        // Choose any file in the folder: missing links are looked up there by name.
         if ui
             .button(crate::i18n::tr(&app.ui.language, "Relink to Folder…"))
             .on_hover_ui(|ui| {

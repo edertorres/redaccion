@@ -202,15 +202,17 @@ fn compute_percentile(bins: &[u32; 256], total_pixels: u64, fraction: f64) -> u8
 
 fn classify_scene(mean: f64, std_dev: f64, p1: u8, p50: u8, p99: u8, dynamic_range: u8) -> SceneType {
     // 1. Extreme low-key / underexposed
-    if p50 < 70 && p99 < 175 && mean < 80.0 {
+    // A scene is underexposed if the bulk of pixels (median p50 and mean) is heavily weighted to shadows.
+    // Protects portraits and indoor photography even when small highlights or collar reflections exist.
+    if (p50 < 75 && mean < 90.0) || (p50 < 90 && mean < 95.0 && p99 < 195) {
         return SceneType::Underexposed;
     }
     // 2. Extreme high-key / overexposed
-    if p50 > 185 && p1 > 80 && mean > 175.0 {
+    if (p50 > 175 && mean > 165.0) || (p50 > 165 && mean > 160.0 && p1 > 60) {
         return SceneType::Overexposed;
     }
     // 3. Flat / hazy / low dynamic range
-    if dynamic_range < 110 && std_dev < 38.0 {
+    if dynamic_range < 115 && std_dev < 38.0 {
         return SceneType::LowContrast;
     }
     // 4. Harsh sunlight / bimodal / high dynamic range

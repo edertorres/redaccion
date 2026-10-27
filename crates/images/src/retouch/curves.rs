@@ -68,54 +68,75 @@ impl ToneCurve {
     ///
     /// * Analyzes $P_1$ and $P_{99}$ to anchor true black and white points safely.
     /// * Avoids harsh clipping by mapping to standard rotary press ink bounds:
-    ///   - Highlight target: default ~4% ink (RGB ~245).
-    ///   - Shadow target: default ~86% ink (RGB ~36).
-    /// * Applies midtone gamma expansion ($1.20 \dots 1.25$) to neutralize dot-gain.
+    ///   - Highlight target: default ~4% ink (RGB ~245) to retain printable raster dots without dropout holes.
+    ///   - Shadow target: default ~90% ink (RGB ~25) to prevent ink puddling and dot-bridging.
+    /// * Applies midtone gamma expansion ($1.20 \dots 1.25$) to neutralize rotary coldset dot-gain (TVI ~28%).
     pub fn auto_levels_for_rotary(
         hist: &PhotoHistogram,
         target_highlight_ink: f32, // e.g. 0.04 (4%)
-        target_shadow_ink: f32,    // e.g. 0.86 (86%)
-        base_gamma: f32,           // e.g. 1.25
+        target_shadow_ink: f32,    // e.g. 0.90 (90%)
+        base_gamma: f32,           // e.g. 1.22
     ) -> Self {
         if hist.total_pixels == 0 {
             return Self::identity();
         }
-
-        // Adapt input points conservatively: do not over-stretch photos that already have natural contrast
-        let (adj_in_black, adj_in_white) = match hist.scene {
-            super::histogram::SceneType::LowContrast => {
-                // Low contrast or flat fog: gently expand
-                (hist.p1, hist.p99)
-            }
-            super::histogram::SceneType::Underexposed => {
-                // Dark photo: anchor shadow gently
-                (hist.p1.min(15), hist.p99.max(240))
-            }
-            super::histogram::SceneType::Overexposed => (hist.p1.min(15), hist.p99),
-            _ => {
-                // Normal & HighContrast: preserve the photographer's natural lighting!
-                // Only trim if there is clear dead space
-                let b = if hist.p1 > 35 { hist.p1.saturating_sub(15) } else { 0 };
-                let w = if hist.p99 < 220 { hist.p99.saturating_add(15) } else { 255 };
-                (b, w)
-            }
-        };
 
         // Convert ink percentage (0.0 to 1.0) to 8-bit RGB target
         // 0% ink -> 255 RGB (pure white); 100% ink -> 0 RGB (solid black)
         let out_white = (255.0 * (1.0 - target_highlight_ink.clamp(0.0, 0.20))).round().clamp(0.0, 255.0) as u8;
         let out_black = (255.0 * (1.0 - target_shadow_ink.clamp(0.50, 1.00))).round().clamp(0.0, 255.0) as u8;
 
-        // Adapt gamma based on detected scene classification
-        let adjusted_gamma = match hist.scene {
-            super::histogram::SceneType::Underexposed => (base_gamma + 0.08).min(1.18), // Controlled lift for dark photos
-            super::histogram::SceneType::Overexposed => (base_gamma - 0.05).max(0.95),  // Tame bright scenes
-            super::histogram::SceneType::LowContrast => (base_gamma + 0.02).min(1.08),
-            super::histogram::SceneType::HighContrast => (base_gamma - 0.02).max(0.98),
-            super::histogram::SceneType::Normal => base_gamma,
+        // Determine input shadow anchor (in_black):
+        // P1 is the 1st percentile. If P1 > 8, pull dead fog out of shadows while protecting real texture.
+        let in_black = match hist.scene {
+            super::histogram::SceneType::LowContrast => hist.p1,
+            super::histogram::SceneType::Underexposed => hist.p1.min(10),
+            super::histogram::SceneType::Overexposed => hist.p1.min(20),
+            _ => {
+                if hist.p1 > 8 {
+                    (hist.p1 as f32 * 0.75).round() as u8
+                } else {
+                    0
+                }
+            }
         };
 
-        Self::from_levels(adj_in_black, adj_in_white, adjusted_gamma, out_black, out_white)
+        // Determine input highlight anchor (in_white):
+        // P99 is the 99th percentile. Expand highlights smoothly without clipping textured whites.
+        let in_white = match hist.scene {
+            super::histogram::SceneType::LowContrast => hist.p99,
+            super::histogram::SceneType::Overexposed => hist.p99.max(250),
+            super::histogram::SceneType::Underexposed => hist.p99.max(240),
+            _ => {
+                if hist.p99 < 248 {
+                    (hist.p99 as f32 + (255.0 - hist.p99 as f32) * 0.25).round().clamp(0.0, 255.0) as u8
+                } else {
+                    255
+                }
+            }
+        };
+
+        // Adapt gamma based on detected scene classification and median luminance:
+        // Rotary coldset press has ~28% dot gain. Midtones MUST be lifted so photos don't look muddy.
+        let adjusted_gamma = match hist.scene {
+            super::histogram::SceneType::Underexposed => (base_gamma + 0.12).clamp(1.15, 1.40),
+            super::histogram::SceneType::Overexposed => (base_gamma - 0.10).clamp(1.04, 1.18),
+            super::histogram::SceneType::LowContrast => (base_gamma + 0.04).clamp(1.10, 1.30),
+            super::histogram::SceneType::HighContrast => (base_gamma - 0.04).clamp(1.10, 1.25),
+            super::histogram::SceneType::Normal => {
+                if hist.p50 < 100 {
+                    let boost = ((100.0 - hist.p50 as f32) / 100.0) * 0.08;
+                    (base_gamma + boost).clamp(1.15, 1.35)
+                } else if hist.p50 > 155 {
+                    let drop = ((hist.p50 as f32 - 155.0) / 100.0) * 0.06;
+                    (base_gamma - drop).clamp(1.08, 1.25)
+                } else {
+                    base_gamma
+                }
+            }
+        };
+
+        Self::from_levels(in_black, in_white, adjusted_gamma, out_black, out_white)
     }
 
     /// Lookup a mapped value for an 8-bit input.
@@ -126,10 +147,10 @@ impl ToneCurve {
 
 /// Apply a tone reproduction curve using Luminance-only processing (Photoshop Luminosity mode).
 ///
-/// Instead of mapping each RGB channel independently (which changes the ratios between channels
-/// and causes severe oversaturation and skin-tone sunburn), this evaluates the tone curve on the
-/// pixel's perceptual luminance ($Y = 0.299R + 0.587G + 0.114B$) and scales the color components
-/// proportionally. This preserves 100% of the original color saturation and hue.
+/// Implements the exact Adobe PDF / W3C specification for `SetLum` (Luminosity blend mode).
+/// Preserves 100% of the original color hue and saturation, adapting out-of-gamut bounds
+/// smoothly through luminance-preserving chroma scaling instead of arbitrary channel clipping.
+/// Uses Rec.709 coefficients ($Y = 0.2126\,R + 0.7152\,G + 0.0722\,B$) matching the sRGB color space.
 /// Alpha channel is strictly preserved.
 pub fn apply_tone_curve(img: &mut RgbaImage, curve: &ToneCurve) {
     for pixel in img.pixels_mut() {
@@ -137,29 +158,40 @@ pub fn apply_tone_curve(img: &mut RgbaImage, curve: &ToneCurve) {
         let g = pixel[1] as f32;
         let b = pixel[2] as f32;
 
-        let y = 0.299 * r + 0.587 * g + 0.114 * b;
+        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
         let y_byte = y.round().clamp(0.0, 255.0) as u8;
         let y_target = curve.get(y_byte) as f32;
 
-        if y > 0.5 {
-            let scale = y_target / y;
-            let max_c = r.max(g).max(b);
-            if max_c * scale > 255.0 && max_c > 0.0 {
-                let s = 255.0 / max_c;
-                pixel[0] = (r * s).round().clamp(0.0, 255.0) as u8;
-                pixel[1] = (g * s).round().clamp(0.0, 255.0) as u8;
-                pixel[2] = (b * s).round().clamp(0.0, 255.0) as u8;
-            } else {
-                pixel[0] = (r * scale).round().clamp(0.0, 255.0) as u8;
-                pixel[1] = (g * scale).round().clamp(0.0, 255.0) as u8;
-                pixel[2] = (b * scale).round().clamp(0.0, 255.0) as u8;
+        let delta = y_target - y;
+        let mut r_new = r + delta;
+        let mut g_new = g + delta;
+        let mut b_new = b + delta;
+
+        let min_c = r_new.min(g_new).min(b_new);
+        let max_c = r_new.max(g_new).max(b_new);
+
+        if min_c < 0.0 {
+            let lum = 0.2126 * r_new + 0.7152 * g_new + 0.0722 * b_new;
+            let denom = lum - min_c;
+            if denom > 1e-4 {
+                r_new = lum + (r_new - lum) * lum / denom;
+                g_new = lum + (g_new - lum) * lum / denom;
+                b_new = lum + (b_new - lum) * lum / denom;
             }
-        } else {
-            let diff = y_target - y;
-            pixel[0] = (r + diff).round().clamp(0.0, 255.0) as u8;
-            pixel[1] = (g + diff).round().clamp(0.0, 255.0) as u8;
-            pixel[2] = (b + diff).round().clamp(0.0, 255.0) as u8;
         }
+        if max_c > 255.0 {
+            let lum = 0.2126 * r_new + 0.7152 * g_new + 0.0722 * b_new;
+            let denom = max_c - lum;
+            if denom > 1e-4 {
+                r_new = lum + (r_new - lum) * (255.0 - lum) / denom;
+                g_new = lum + (g_new - lum) * (255.0 - lum) / denom;
+                b_new = lum + (b_new - lum) * (255.0 - lum) / denom;
+            }
+        }
+
+        pixel[0] = r_new.round().clamp(0.0, 255.0) as u8;
+        pixel[1] = g_new.round().clamp(0.0, 255.0) as u8;
+        pixel[2] = b_new.round().clamp(0.0, 255.0) as u8;
     }
 }
 

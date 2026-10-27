@@ -26,6 +26,7 @@ plan/
 *.tmp*
 *.bak
 /foto.jpg
+crates/ui-egui/*.designcraft
 
 # Cloud drive sync cache, downloaded templates and access tokens
 /templates/cloud/

@@ -45,23 +45,42 @@ impl RotaryPreset {
         }
     }
 
-    /// Target printable highlight ink limit. Full dynamic range for ICC separation.
+    /// Target printable highlight ink limit (ISO 12647-3 / WAN-IFRA).
+    ///
+    /// Anchors highlight detail to the plate's minimum printable dot retention (3%–4% for newsprint),
+    /// preventing abrupt raster dropout holes and harsh jagged edges against bare paper.
     pub fn target_highlight_ink(&self) -> f32 {
-        0.0
+        match self {
+            Self::ColdsetNewspaper => 0.04,     // 4% highlight dot retention on coldset newsprint
+            Self::ImprovedNewspaperSC => 0.03,  // 3% highlight dot on SC 55g
+            Self::HeatsetMagazine => 0.02,      // 2% highlight dot on LWC/coated
+            Self::CommercialSheetfed => 0.01,   // 1% highlight dot on commercial sheetfed
+        }
     }
 
-    /// Target printable shadow ink limit. Full black range; the ICC profile and TAC clamp prevent ink clogging.
+    /// Target printable shadow ink limit.
+    ///
+    /// Newsprint paper (42–45g) is highly porous. Continuous tone shadow detail must not exceed
+    /// 90%–92% tone value to prevent halftone dot-bridging, ink flooding, smearing and maculatura.
     pub fn target_shadow_ink(&self) -> f32 {
-        1.0
+        match self {
+            Self::ColdsetNewspaper => 0.90,     // 90% shadow ceiling (prevents ink bleeding & muddiness)
+            Self::ImprovedNewspaperSC => 0.92,  // 92% shadow ceiling
+            Self::HeatsetMagazine => 0.95,      // 95% shadow ceiling
+            Self::CommercialSheetfed => 0.98,   // 98% shadow ceiling
+        }
     }
 
-    /// Midtone gamma adjustment without double TVI compensation.
+    /// Midtone gamma adjustment compensating for press dot-gain (TVI - Tone Value Increase).
+    ///
+    /// Coldset rotary newspaper presses experience 28%–32% dot gain at 50% screen (ISO 12647-3 curve F).
+    /// Without midtone gamma lift (1.20–1.24), photos print disastrously dark, murky and muddy.
     pub fn midtone_gamma(&self) -> f32 {
         match self {
-            Self::ColdsetNewspaper => 1.03, // Crisp natural midtone clarity
-            Self::ImprovedNewspaperSC => 1.02,
-            Self::HeatsetMagazine => 1.01,
-            Self::CommercialSheetfed => 1.0,
+            Self::ColdsetNewspaper => 1.22,     // Compensates for ~28% coldset TVI
+            Self::ImprovedNewspaperSC => 1.16,  // Compensates for ~24% SC TVI
+            Self::HeatsetMagazine => 1.10,      // Compensates for ~18% heatset TVI
+            Self::CommercialSheetfed => 1.04,   // Compensates for ~14% sheetfed TVI
         }
     }
 
@@ -75,13 +94,14 @@ impl RotaryPreset {
         }
     }
 
-    /// Calibrated unsharp mask parameters: subtle print crispness without halo ringing or harsh cutouts.
+    /// Calibrated unsharp mask parameters: tuned for coarse halftone screens (100–120 LPI)
+    /// and porous ink spread to achieve authentic print punch and clarity without halo ringing.
     pub fn unsharp_params(&self) -> UnsharpParams {
         match self {
-            Self::ColdsetNewspaper => UnsharpParams { radius: 0.8, amount: 0.40, threshold: 6 },
-            Self::ImprovedNewspaperSC => UnsharpParams { radius: 0.7, amount: 0.35, threshold: 5 },
-            Self::HeatsetMagazine => UnsharpParams { radius: 0.6, amount: 0.30, threshold: 4 },
-            Self::CommercialSheetfed => UnsharpParams { radius: 0.5, amount: 0.25, threshold: 3 },
+            Self::ColdsetNewspaper => UnsharpParams { radius: 1.4, amount: 0.95, threshold: 3 },
+            Self::ImprovedNewspaperSC => UnsharpParams { radius: 1.2, amount: 0.85, threshold: 3 },
+            Self::HeatsetMagazine => UnsharpParams { radius: 1.0, amount: 0.70, threshold: 3 },
+            Self::CommercialSheetfed => UnsharpParams { radius: 0.8, amount: 0.55, threshold: 2 },
         }
     }
 }

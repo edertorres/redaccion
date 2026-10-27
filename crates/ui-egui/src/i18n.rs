@@ -533,6 +533,9 @@ const TABLE: &[(&str, [&str; 5])] = &[
     ("Release", ["Release", "Release", "Release", "Release", "释放"]),
     ("Relink to Folder…", ["Relink to Folder…", "Relink to Folder…", "Relink to Folder…", "Relink to Folder…", "重新链接到文件夹…"]),
     ("Relink…", ["Relink…", "Relink…", "Relink…", "Relink…", "重新链接…"]),
+    ("Purge Unused", ["Ungenutzte bereinigen", "Purger les inutilisés", "Purgar no utilizados", "未使用を削除", "清除未使用"]),
+    ("Delete Asset", ["Asset löschen", "Supprimer la ressource", "Eliminar recurso", "アセットを削除", "删除资源"]),
+    ("Choose a link to inspect or manage.", ["Verknüpfung auswählen", "Choisir un lien", "Seleccione un recurso para inspeccionar o gestionar.", "リンクを選択", "选择链接"]),
     (
         "Remove Conditions from Selection",
         [

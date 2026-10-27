@@ -21,13 +21,13 @@ pub struct UnsharpParams {
 
 impl Default for UnsharpParams {
     fn default() -> Self {
-        Self { radius: 0.8, amount: 0.40, threshold: 6 }
+        Self { radius: 1.4, amount: 0.95, threshold: 3 }
     }
 }
 
 /// Apply unsharp masking to an RGBA image in place using Luminance-only processing.
 ///
-/// By sharpening only the perceptual luminance channel ($Y = 0.299R + 0.587G + 0.114B$)
+/// By sharpening only the perceptual luminance channel ($Y = 0.2126R + 0.7152G + 0.0722B$)
 /// and adding the same sharpening delta to all color channels, the image achieves
 /// crisp print clarity with ZERO color fringing, ZERO chromatic edge artifacts,
 /// and complete preservation of natural skin tones and color saturation.
@@ -50,7 +50,7 @@ pub fn apply_unsharp_mask(img: &mut RgbaImage, params: &UnsharpParams) {
     };
 
     // Extract perceptual luminance Y into a flat buffer (1 float per pixel)
-    let orig_lum: Vec<f32> = img.pixels().map(|p| 0.299 * (p[0] as f32) + 0.587 * (p[1] as f32) + 0.114 * (p[2] as f32)).collect();
+    let orig_lum: Vec<f32> = img.pixels().map(|p| 0.2126 * (p[0] as f32) + 0.7152 * (p[1] as f32) + 0.0722 * (p[2] as f32)).collect();
 
     if orig_lum.len() != total_pixels {
         return;

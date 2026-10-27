@@ -12,8 +12,8 @@ use std::sync::Arc;
 
 use designcraft_doc::{Asset, AssetId, Content, ItemId};
 use designcraft_images::{
-    PhotoHistogram, RotaryPreset, ToneCurve, apply_tone_curve, apply_unsharp_mask, decode_rgba, encode_cmyk_tiff, encode_png, measure_tac,
-    separate_to_rotary_cmyk,
+    PhotoHistogram, RotaryPreset, ToneCurve, apply_tone_curve, apply_unsharp_mask, cmyk_raster_to_display_rgba, decode_cmyk_tiff, decode_rgba,
+    encode_cmyk_tiff, encode_png, is_cmyk_tiff, measure_tac, separate_to_rotary_cmyk,
 };
 
 use crate::DesignApp;
@@ -172,7 +172,14 @@ pub fn drain_retouch(app: &mut DesignApp, ctx: &egui::Context) {
         }
         1 => {
             // Step 1: Decode RGBA
-            match decode_rgba(&task.data) {
+            let decoded = if is_cmyk_tiff(&task.data) {
+                decode_cmyk_tiff(&task.data).map(|r| cmyk_raster_to_display_rgba(&r))
+            } else {
+                None
+            }
+            .or_else(|| decode_rgba(&task.data));
+
+            match decoded {
                 Some(rgba) => {
                     task.rgba = Some(rgba);
                     task.step = 2;

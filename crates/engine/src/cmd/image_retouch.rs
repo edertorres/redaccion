@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use designcraft_doc::{Asset, AssetId, Content};
 use designcraft_images::{
-    RetouchOptions, RotaryPreset, decode_cmyk_tiff, encode_cmyk_tiff, is_cmyk_tiff, measure_tac, optimize_for_rotary_press_with_options,
+    RetouchOptions, RotaryPreset, cmyk_raster_to_display_rgba, decode_cmyk_tiff, encode_cmyk_tiff, is_cmyk_tiff, measure_tac, optimize_for_rotary_press_with_options,
     separate_to_cmyk_with_profile,
 };
 
@@ -81,8 +81,13 @@ fn retouch_rotary(s: &mut Session, p: &Value) -> Result<Value> {
                 return Err(bad(ID, format!("asset {} is a vector format (PDF/SVG); only raster photos can be retouched", asset.name)));
             }
 
-            let rgba =
-                designcraft_images::decode_rgba(&asset.data).ok_or_else(|| bad(ID, format!("could not decode raster image from {}", asset.name)))?;
+            let rgba = if is_cmyk_tiff(&asset.data) {
+                decode_cmyk_tiff(&asset.data).map(|r| cmyk_raster_to_display_rgba(&r))
+            } else {
+                None
+            }
+            .or_else(|| designcraft_images::decode_rgba(&asset.data))
+            .ok_or_else(|| bad(ID, format!("could not decode raster image from {}", asset.name)))?;
 
             let mut retouched_rgba = rgba;
             let report = optimize_for_rotary_press_with_options(&mut retouched_rgba, preset, &retouch_opts);

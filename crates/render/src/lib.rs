@@ -967,7 +967,13 @@ pub fn decode_pixmap_page(bytes: &[u8], page: u32) -> Option<Pixmap> {
         let data = px.as_chunks::<4>().0.iter().map(|p| vello_cpu::color::PremulRgba8 { r: p[0], g: p[1], b: p[2], a: p[3] }).collect();
         return Some(Pixmap::from_parts(data, w.min(u16::MAX as u32) as u16, h.min(u16::MAX as u32) as u16));
     }
-    let img = designcraft_images::decode_rgba(bytes)?;
+    let img = if designcraft_images::is_cmyk_tiff(bytes) {
+        designcraft_images::decode_cmyk_tiff(bytes)
+            .map(|r| designcraft_images::cmyk_raster_to_display_rgba(&r))
+            .or_else(|| designcraft_images::decode_rgba(bytes))?
+    } else {
+        designcraft_images::decode_rgba(bytes)?
+    };
     let (w, h) = img.dimensions();
     if w == 0 || h == 0 || w > u16::MAX as u32 || h > u16::MAX as u32 {
         return None;

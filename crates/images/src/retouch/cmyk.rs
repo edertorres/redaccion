@@ -156,18 +156,33 @@ pub fn separate_to_cmyk_with_profile(img: &RgbaImage, preset: RotaryPreset, prof
             let max_byte_sum = (max_tac_f32 * 255.0).round() as u16;
             let byte_sum = c_byte as u16 + m_byte as u16 + y_byte as u16 + k_byte as u16;
             if byte_sum > max_byte_sum {
-                let mut excess = byte_sum - max_byte_sum;
-                for b in [&mut y_byte, &mut m_byte, &mut c_byte] {
-                    if excess == 0 {
-                        break;
+                let excess = byte_sum - max_byte_sum;
+                let cmy_sum = (c_byte as u16) + (m_byte as u16) + (y_byte as u16);
+                if cmy_sum > 0 {
+                    // Proportional reduction of C, M, Y to strictly preserve neutral grey balance
+                    let scale = (cmy_sum.saturating_sub(excess) as f32) / (cmy_sum as f32);
+                    c_byte = ((c_byte as f32) * scale).round() as u8;
+                    m_byte = ((m_byte as f32) * scale).round() as u8;
+                    y_byte = ((y_byte as f32) * scale).round() as u8;
+
+                    // Final rounding adjustment: deduct single unit from the largest component
+                    let mut rem = (c_byte as u16 + m_byte as u16 + y_byte as u16 + k_byte as u16).saturating_sub(max_byte_sum);
+                    while rem > 0 {
+                        if c_byte >= m_byte && c_byte >= y_byte && c_byte > 0 {
+                            c_byte -= 1;
+                        } else if m_byte >= y_byte && m_byte > 0 {
+                            m_byte -= 1;
+                        } else if y_byte > 0 {
+                            y_byte -= 1;
+                        } else if k_byte > 0 {
+                            k_byte -= 1;
+                        } else {
+                            break;
+                        }
+                        rem -= 1;
                     }
-                    let take = (*b as u16).min(excess);
-                    *b -= take as u8;
-                    excess -= take;
-                }
-                if excess > 0 {
-                    let take = (k_byte as u16).min(excess);
-                    k_byte -= take as u8;
+                } else {
+                    k_byte = k_byte.saturating_sub(excess as u8);
                 }
             }
 
@@ -318,10 +333,10 @@ pub fn cmyk_raster_to_display_rgba(raster: &CmykRaster) -> RgbaImage {
                 if let Some(rgb) = icc.to_srgb(&[c, m, y, k], Intent::RelativeColorimetric) {
                     rgb
                 } else {
-                    generic_newspaper.to_srgb([c, m, y, k], false)
+                    generic_newspaper.to_srgb_bpc([c, m, y, k])
                 }
             } else {
-                generic_newspaper.to_srgb([c, m, y, k], false)
+                generic_newspaper.to_srgb_bpc([c, m, y, k])
             };
 
             let r_byte = (r * 255.0).round().clamp(0.0, 255.0) as u8;

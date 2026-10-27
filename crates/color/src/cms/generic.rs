@@ -197,6 +197,22 @@ impl GenericCmyk {
         xyz_to_srgb(if absolute { self.to_xyz(cmyk) } else { self.to_xyz_rel(cmyk) })
     }
 
+    /// Display sRGB with Black Point Compensation (BPC): maps printable black to monitor 0,
+    /// restoring full visual contrast for on-screen inspection.
+    pub fn to_srgb_bpc(&self, cmyk: [f32; 4]) -> [f32; 3] {
+        let x = self.to_xyz_rel(cmyk);
+        let bp = self.black_rel;
+        let x_bpc = [0, 1, 2].map(|i| {
+            let den = 1.0 - bp[i] / D50[i];
+            if den.abs() > 1e-4 {
+                ((x[i] - bp[i]) / den).clamp(0.0, D50[i])
+            } else {
+                x[i]
+            }
+        });
+        xyz_to_srgb(x_bpc)
+    }
+
     /// Lab of the darkest printable black (media-relative).
     pub fn black_point(&self) -> Lab {
         xyz_to_lab(self.black_rel)

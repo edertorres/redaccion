@@ -104,8 +104,8 @@ fn load_fonts_into_cache(dir: &Path, cache: &mut std::collections::HashMap<Strin
 }
 
 pub fn serve(args: &[String]) -> Result<(), String> {
-    let mut port: u16 = load_env_var("PORT").and_then(|p| p.parse().ok()).unwrap_or(8767);
-    let mut bind_addr = load_env_var("BIND_ADDR").unwrap_or_else(|| "0.0.0.0".to_string());
+    let mut port: u16 = 8767;
+    let mut bind_addr = "0.0.0.0".to_string();
     let mut templates_dir = PathBuf::from("templates");
     let mut docs_dir = PathBuf::from("documents");
     let mut fonts_dir = PathBuf::from("fonts");
@@ -290,7 +290,8 @@ fn handle_connection(
             "cloud/sync" if method == "POST" => {
                 let payload = read_json_body(&mut reader, content_length).unwrap_or(json!({}));
                 let token = payload["accessToken"].as_str().unwrap_or("");
-                let force_refresh = payload["forceRefresh"].as_bool().unwrap_or(false) || payload["clearCache"].as_bool().unwrap_or(false);
+                let force_refresh = payload["forceRefresh"].as_bool().unwrap_or(false)
+                    || payload["clearCache"].as_bool().unwrap_or(false);
                 let folder_id =
                     payload["folderId"].as_str().map(String::from).or_else(|| load_env_var("VITE_DRIVE_TEMPLATES_FOLDER_ID")).unwrap_or_default();
 
@@ -299,16 +300,14 @@ fn handle_connection(
                 }
 
                 let (mut cat, sync_success, sync_error) = if token.is_empty() {
-                    let fallback =
-                        get_or_build_cloud_catalog(templates).unwrap_or_else(|_| json!({"status": "ok", "categories": [], "templates": []}));
+                    let fallback = get_or_build_cloud_catalog(templates).unwrap_or_else(|_| json!({"status": "ok", "categories": [], "templates": []}));
                     (fallback, false, Some("No access token provided".to_string()))
                 } else {
                     match sync_cloud_catalog_with_drive(templates, token, &folder_id) {
                         Ok(c) => (c, true, None),
                         Err(e) => {
                             eprintln!("[serve] Advertencia sync con Drive ({e}).");
-                            let fallback =
-                                get_or_build_cloud_catalog(templates).unwrap_or_else(|_| json!({"status": "ok", "categories": [], "templates": []}));
+                            let fallback = get_or_build_cloud_catalog(templates).unwrap_or_else(|_| json!({"status": "ok", "categories": [], "templates": []}));
                             (fallback, false, Some(e))
                         }
                     }
@@ -353,18 +352,7 @@ fn handle_connection(
                 let date_str = payload["date"].as_str().unwrap_or("");
                 let export_pdf = payload["exportPdf"].as_bool().unwrap_or(true);
                 let pdf_standard = payload["pdfStandard"].as_str().unwrap_or("x1a");
-                upload_document_to_drive(
-                    &mut stream,
-                    docs,
-                    doc_id,
-                    token,
-                    &dest_folder_id,
-                    is_page_folder,
-                    base_name,
-                    date_str,
-                    export_pdf,
-                    pdf_standard,
-                )?;
+                upload_document_to_drive(&mut stream, docs, doc_id, token, &dest_folder_id, is_page_folder, base_name, date_str, export_pdf, pdf_standard)?;
             }
             "templates" if method == "GET" || method == "HEAD" => {
                 let list = list_files(templates)?;
@@ -1764,7 +1752,8 @@ fn add_template_file_to_list(
         }
     };
 
-    let has_thumb = templates_root.join(format!("{stem}.png")).is_file()
+    let has_thumb =
+        templates_root.join(format!("{stem}.png")).is_file()
         || templates_root.join(format!("{stem}.jpg")).is_file()
         || templates_root.join("cloud").join("thumbnails").join(format!("{stem}.png")).is_file()
         || templates_root.join("cloud").join("thumbnails").join(format!("{stem}.jpg")).is_file()
@@ -2170,7 +2159,13 @@ fn render_designcraft_thumbnail(bytes: &[u8]) -> Option<Vec<u8>> {
     Some(rendered.to_png())
 }
 
-fn serve_cloud_thumbnail(stream: &mut TcpStream, templates: &Path, docs: &Path, thumb_id: &str, query: &str) -> Result<(), String> {
+fn serve_cloud_thumbnail(
+    stream: &mut TcpStream,
+    templates: &Path,
+    docs: &Path,
+    thumb_id: &str,
+    query: &str,
+) -> Result<(), String> {
     let Some(clean_id) = sanitize_id(thumb_id) else {
         let err = json!({"error": "invalid thumbnail id"}).to_string();
         return send_response(stream, 400, "Bad Request", "application/json", err.as_bytes());
@@ -2188,9 +2183,9 @@ fn serve_cloud_thumbnail(stream: &mut TcpStream, templates: &Path, docs: &Path, 
             let _ = fs::write(&token_file, trimmed);
         }
     }
-    let effective_token = query_token
-        .filter(|s| !s.trim().is_empty())
-        .or_else(|| fs::read_to_string(&token_file).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()));
+    let effective_token = query_token.filter(|s| !s.trim().is_empty()).or_else(|| {
+        fs::read_to_string(&token_file).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    });
 
     // 1. Direct pre-rendered or existing thumbnail files
     let candidates = [
@@ -2220,15 +2215,11 @@ fn serve_cloud_thumbnail(stream: &mut TcpStream, templates: &Path, docs: &Path, 
                     continue;
                 }
                 let sub_png = p.join(format!("{clean_id}.png"));
-                if sub_png.is_file()
-                    && let Ok(bytes) = fs::read(&sub_png)
-                {
+                if sub_png.is_file() && let Ok(bytes) = fs::read(&sub_png) {
                     return send_cached_response(stream, 200, "OK", "image/png", &bytes);
                 }
                 let sub_jpg = p.join(format!("{clean_id}.jpg"));
-                if sub_jpg.is_file()
-                    && let Ok(bytes) = fs::read(&sub_jpg)
-                {
+                if sub_jpg.is_file() && let Ok(bytes) = fs::read(&sub_jpg) {
                     return send_cached_response(stream, 200, "OK", "image/jpeg", &bytes);
                 }
             }
@@ -2237,7 +2228,10 @@ fn serve_cloud_thumbnail(stream: &mut TcpStream, templates: &Path, docs: &Path, 
 
     // 2. Fast instant extraction of embedded XMP JPEG from IDML if present locally
     let (local_dc, local_idml) = find_local_template(templates, &clean_id);
-    let mut idml_paths = vec![templates.join("cloud").join(format!("{clean_id}.idml")), templates.join(format!("{clean_id}.idml"))];
+    let mut idml_paths = vec![
+        templates.join("cloud").join(format!("{clean_id}.idml")),
+        templates.join(format!("{clean_id}.idml")),
+    ];
     if let Some(ref li) = local_idml {
         idml_paths.push(li.clone());
     }
@@ -2268,13 +2262,10 @@ fn serve_cloud_thumbnail(stream: &mut TcpStream, templates: &Path, docs: &Path, 
     }
 
     // 4. If not found locally, try downloading from Google Drive if token is available
-    if dc_bytes_opt.is_none()
-        && let Some(ref tok) = effective_token
-    {
+    if dc_bytes_opt.is_none() && let Some(ref tok) = effective_token {
         println!("[serve] Descargando archivo `{clean_id}` desde Google Drive para generar miniatura...");
         let dl_url = format!("https://www.googleapis.com/drive/v3/files/{clean_id}?alt=media&supportsAllDrives=true");
-        if let Ok(raw_bytes) =
-            run_curl(&["-s", "-L", "--connect-timeout", "10", "--max-time", "60", "-H", &format!("Authorization: Bearer {tok}"), &dl_url])
+        if let Ok(raw_bytes) = run_curl(&["-s", "-L", "--connect-timeout", "10", "--max-time", "60", "-H", &format!("Authorization: Bearer {tok}"), &dl_url])
             && !raw_bytes.is_empty()
         {
             if designcraft_idml::is_idml(&raw_bytes) {
@@ -2410,8 +2401,7 @@ fn open_cloud_template(
                     "error": "google_auth_error",
                     "status": code,
                     "message": format!("Sesión de Google Drive expirada o no autorizada ({code}): {msg}")
-                })
-                .to_string();
+                }).to_string();
                 return send_response(
                     stream,
                     if code == 401 { 401 } else { 502 },
@@ -2431,8 +2421,7 @@ fn open_cloud_template(
             let err = json!({
                 "error": "invalid_template_format",
                 "message": "El archivo descargado no es una maqueta compatible (.designcraft o .idml)"
-            })
-            .to_string();
+            }).to_string();
             return send_response(stream, 502, "Bad Gateway", "application/json", err.as_bytes());
         };
 
@@ -2446,8 +2435,7 @@ fn open_cloud_template(
             "error": "google_auth_error",
             "status": 401,
             "message": "Se requiere iniciar sesión con Google Drive para descargar esta plantilla."
-        })
-        .to_string();
+        }).to_string();
         return send_response(stream, 401, "Unauthorized", "application/json", res.as_bytes());
     };
 

@@ -53,6 +53,33 @@ pub fn specs() -> Vec<CommandSpec> {
                 Ok(Value::Null)
             })
         }),
+        cmd!(
+            "links.delete",
+            "Delete Asset",
+            ["Window", "Links"],
+            None,
+            "{asset, removeFrames?: bool (default false)} — remove asset from document, clearing placed frames",
+            has_doc,
+            delete_asset
+        ),
+        cmd!(
+            "links.purgeUnused",
+            "Purge Unused Assets",
+            ["Window", "Links"],
+            None,
+            "{} — removes all assets that are not placed in any frame, freeing document size",
+            has_doc,
+            purge_unused
+        ),
+        cmd!(
+            "links.replaceData",
+            "Replace Asset Data",
+            ["Window", "Links"],
+            None,
+            "{asset, base64: String, name?: String} — replaces the asset binary bytes directly",
+            has_doc,
+            replace_data
+        ),
         cmd!(noundo "links.goTo", "Go To Link", ["Window", "Links"], None, "{asset} — selects the frames showing the graphic", has_doc, |s, p| {
             let aid = asset_param(p, "links.goTo")?;
             let st = s.doc_mut()?;
@@ -111,11 +138,23 @@ pub fn status(a: &designcraft_doc::Asset) -> &'static str {
     }
 }
 
+fn format_size(bytes: usize) -> String {
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+    }
+}
+
 fn list(d: &Document) -> Vec<Value> {
     d.assets
         .values()
         .map(|a| {
-            let uses: Vec<Value> = uses(d, a.id)
+            let item_uses = uses(d, a.id);
+            let is_used = !item_uses.is_empty();
+            let uses: Vec<Value> = item_uses
                 .into_iter()
                 .map(|id| {
                     // Effective resolution: image pixels over the size it is shown at.
@@ -136,7 +175,19 @@ fn list(d: &Document) -> Vec<Value> {
                     json!({"id": id.0, "page": page, "ppi": ppi})
                 })
                 .collect();
-            json!({"asset": a.id.0, "name": a.name, "path": a.link, "status": status(a), "pixels": a.pixels, "uses": uses})
+            let size = a.data.len();
+            json!({
+                "asset": a.id.0,
+                "name": a.name,
+                "path": a.link,
+                "status": status(a),
+                "pixels": a.pixels,
+                "mime": a.mime,
+                "size": size,
+                "sizeFormatted": format_size(size),
+                "uses": uses,
+                "used": is_used
+            })
         })
         .collect()
 }
@@ -235,6 +286,93 @@ fn update(s: &mut Session, p: &Value) -> Result<Value> {
     })
 }
 
+fn delete_asset(s: &mut Session, p: &Value) -> Result<Value> {
+    let aid = asset_param(p, "links.delete")?;
+    let remove_frames = p.get("removeFrames").and_then(Value::as_bool).unwrap_or(false);
+    s.edit(|d, sel| {
+        if !d.assets.contains_key(&aid) {
+            return Err(bad("links.delete", "no such asset"));
+        }
+        let item_ids = uses(d, aid);
+        let frames_count = item_ids.len();
+        if remove_frames {
+            for fid in &item_ids {
+                let _ = d.remove_item(*fid);
+            }
+            sel.items.retain(|id| !item_ids.contains(id));
+        } else {
+            for fid in &item_ids {
+                if let Some(it) = d.item_mut(*fid) {
+                    it.content = Content::Unassigned;
+                }
+            }
+        }
+        let old = d.assets.remove(&aid);
+        let bytes_freed = old.map(|a| a.data.len()).unwrap_or(0);
+        Ok(json!({
+            "asset": aid.0,
+            "deleted": true,
+            "framesAffected": frames_count,
+            "bytesFreed": bytes_freed
+        }))
+    })
+}
+
+fn purge_unused(s: &mut Session, _p: &Value) -> Result<Value> {
+    s.edit(|d, _| {
+        let mut unused_ids = Vec::new();
+        for &aid in d.assets.keys() {
+            if uses(d, aid).is_empty() {
+                unused_ids.push(aid);
+            }
+        }
+        let mut bytes_freed = 0usize;
+        let mut names = Vec::new();
+        for aid in &unused_ids {
+            if let Some(old) = d.assets.remove(aid) {
+                bytes_freed += old.data.len();
+                names.push(old.name.clone());
+            }
+        }
+        Ok(json!({
+            "purged": unused_ids.len(),
+            "bytesFreed": bytes_freed,
+            "names": names
+        }))
+    })
+}
+
+fn replace_data(s: &mut Session, p: &Value) -> Result<Value> {
+    let aid = asset_param(p, "links.replaceData")?;
+    let b64 = p.get("base64").and_then(Value::as_str).ok_or_else(|| bad("links.replaceData", "missing base64"))?;
+    let bytes = super::base64_decode(b64);
+    if bytes.is_empty() {
+        return Err(bad("links.replaceData", "empty data"));
+    }
+    let mime = designcraft_render::image_mime(&bytes).to_string();
+    let name_opt = str_param(p, "name").map(|s| s.to_string());
+
+    let (pw, ph) = if designcraft_render::is_pdf(&bytes) {
+        designcraft_render::pdf_page_size(&bytes, 0)
+            .map(|(w, h)| (w.round().max(1.0) as u32, h.round().max(1.0) as u32))
+            .ok_or_else(|| bad("links.replaceData", "can't read PDF"))?
+    } else {
+        designcraft_render::image_size(&bytes).ok_or_else(|| bad("links.replaceData", "unsupported image"))?
+    };
+
+    s.edit(|d, _| {
+        let a = d.assets.get_mut(&aid).ok_or_else(|| bad("links.replaceData", "no such asset"))?;
+        let a = Arc::make_mut(a);
+        a.mime = mime;
+        a.pixels = Some((pw, ph));
+        if let Some(n) = name_opt {
+            a.name = n;
+        }
+        a.data = Arc::new(bytes);
+        Ok(json!({"asset": aid.0, "name": a.name, "pixels": [pw, ph]}))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,6 +415,67 @@ mod tests {
         s.execute("links.embed", &json!({"asset": aid})).unwrap();
         assert_eq!(s.execute("links.list", &json!({})).unwrap()[0]["status"], "embedded");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_delete_and_purge_unused_and_replace_data() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({})).unwrap();
+        let p1 = png(10, 10);
+        let p2 = png(25, 15);
+        let b64_1 = crate::cmd::base64_encode(&p1);
+        let b64_2 = crate::cmd::base64_encode(&p2);
+
+        // Place an image
+        s.execute("file.place", &json!({"base64": b64_1, "name": "used.png", "x": 10, "y": 10, "width": 50})).unwrap();
+
+        // Add an unused asset directly
+        let unused_aid = s
+            .edit(|d, _| {
+                let aid = AssetId(d.alloc());
+                d.assets.insert(
+                    aid,
+                    Arc::new(designcraft_doc::Asset {
+                        id: aid,
+                        name: "unused.png".into(),
+                        mime: "image/png".into(),
+                        link: None,
+                        data: Arc::new(p1.clone()),
+                        pixels: Some((10, 10)),
+                        page: 0,
+                    }),
+                );
+                Ok(json!(aid.0))
+            })
+            .unwrap()
+            .as_u64()
+            .unwrap();
+
+        let list_before = s.execute("links.list", &json!({})).unwrap();
+        assert_eq!(list_before.as_array().unwrap().len(), 2);
+        let unused_entry = list_before.as_array().unwrap().iter().find(|x| x["asset"] == unused_aid).unwrap();
+        assert_eq!(unused_entry["used"], false);
+
+        // Purge unused
+        let purged = s.execute("links.purgeUnused", &json!({})).unwrap();
+        assert_eq!(purged["purged"], 1);
+        assert_eq!(purged["bytesFreed"], p1.len());
+
+        let list_after_purge = s.execute("links.list", &json!({})).unwrap();
+        assert_eq!(list_after_purge.as_array().unwrap().len(), 1);
+        let used_aid = list_after_purge[0]["asset"].as_u64().unwrap();
+        assert_eq!(list_after_purge[0]["used"], true);
+
+        // Replace data of the placed asset
+        let replaced = s.execute("links.replaceData", &json!({"asset": used_aid, "base64": b64_2, "name": "replaced.png"})).unwrap();
+        assert_eq!(replaced["name"], "replaced.png");
+        assert_eq!(replaced["pixels"], json!([25, 15]));
+
+        // Delete asset
+        let del = s.execute("links.delete", &json!({"asset": used_aid})).unwrap();
+        assert_eq!(del["deleted"], true);
+        assert_eq!(del["framesAffected"], 1);
+        assert_eq!(s.execute("links.list", &json!({})).unwrap().as_array().unwrap().len(), 0);
     }
 }
 

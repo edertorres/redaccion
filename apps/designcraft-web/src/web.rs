@@ -54,11 +54,7 @@ pub fn start() {
             return;
         };
         let mut options = eframe::WebOptions::default();
-        let has_webgpu = web_sys::window()
-            .and_then(|w| js_sys::Reflect::get(&w.navigator(), &wasm_bindgen::JsValue::from_str("gpu")).ok())
-            .is_some_and(|v| !v.is_undefined() && !v.is_null());
-
-        if (!has_webgpu || query().contains("webgl"))
+        if query().contains("webgl")
             && let eframe::egui_wgpu::WgpuSetup::CreateNew(create) = &mut options.wgpu_options.wgpu_setup
         {
             create.instance_descriptor.backends = eframe::wgpu::Backends::GL;
@@ -94,8 +90,6 @@ pub fn start() {
                         }
                         let inbox: Inbox = Inbox::default();
                         let mut app = DesignApp::new(Session::new(), services(inbox.clone(), cc.egui_ctx.clone(), active_doc_id.clone()));
-                        app.ui.ui_scale = 1.6;
-                        cc.egui_ctx.set_zoom_factor(1.6);
                         if is_editor {
                             app.session.restrict_to_editor();
                         }
@@ -442,13 +436,15 @@ fn services(inbox: Inbox, ctx: egui::Context, active_doc_id: Arc<Mutex<Option<St
             let is_bullet = purpose == "bullet";
             let is_styles = purpose == "styles";
             let is_place = purpose == "place";
+            let is_relink = purpose.starts_with("relink:");
+            let purpose_str = purpose.to_string();
             let dialog = if purpose == "swatches" {
                 rfd::AsyncFileDialog::new().add_filter("Swatch Exchange (ASE)", &["ase"])
             } else if is_bullet {
                 rfd::AsyncFileDialog::new().add_filter("Graphics, SVG and PDF", &["svg", "pdf", "png", "jpg", "jpeg", "webp", "gif"])
             } else if is_styles {
                 rfd::AsyncFileDialog::new().add_filter("DesignCraft or IDML", DOC_EXTS)
-            } else if is_place {
+            } else if is_place || is_relink {
                 rfd::AsyncFileDialog::new().add_filter("Graphics", IMAGE_EXTS)
             } else {
                 rfd::AsyncFileDialog::new().add_filter("DesignCraft", DOC_EXTS)
@@ -463,6 +459,8 @@ fn services(inbox: Inbox, ctx: egui::Context, active_doc_id: Arc<Mutex<Option<St
                     inbox.lock().unwrap_or_else(|e| e.into_inner()).push((format!("bullet:{raw_name}"), bytes));
                 } else if is_styles {
                     inbox.lock().unwrap_or_else(|e| e.into_inner()).push((format!("styles:{raw_name}"), bytes));
+                } else if is_relink {
+                    inbox.lock().unwrap_or_else(|e| e.into_inner()).push((format!("{purpose_str}:{raw_name}"), bytes));
                 } else {
                     let lower = raw_name.to_ascii_lowercase();
                     let is_doc = !is_place && (lower.ends_with(".designcraft") || lower.ends_with(".idml"));
