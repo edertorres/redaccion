@@ -7,9 +7,9 @@ services:
     container_name: redaccion-web
     restart: unless-stopped
     ports:
-      - "${PORT:-5137}:5137"
+      - "${PORT:-5173}:5173"
     environment:
-      - PORT=5137
+      - PORT=5173
       - BIND_ADDR=0.0.0.0
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - VITE_DEEPSEEK_API_KEY=${VITE_DEEPSEEK_API_KEY:-}
