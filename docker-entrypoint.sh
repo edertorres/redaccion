@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-PORT="${PORT:-8767}"
+PORT="${PORT:-5137}"
 BIND="${BIND_ADDR:-0.0.0.0}"
 
 # Ensure storage directories exist
