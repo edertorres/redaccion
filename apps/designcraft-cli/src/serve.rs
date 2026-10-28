@@ -104,7 +104,7 @@ fn load_fonts_into_cache(dir: &Path, cache: &mut std::collections::HashMap<Strin
 }
 
 pub fn serve(args: &[String]) -> Result<(), String> {
-    let mut port: u16 = 5173;
+    let mut port: u16 = 8767;
     let mut bind_addr = "0.0.0.0".to_string();
     let mut templates_dir = PathBuf::from("templates");
     let mut docs_dir = PathBuf::from("documents");
