@@ -839,7 +839,18 @@ pub(crate) fn format_targets(s: &Session) -> Vec<Target> {
         return v;
     }
     if let Some(t) = st.selection.text {
-        return vec![Target { story: t.story, cell: t.cell, range: t.range() }];
+        let range = if s.editor_mode && t.range().is_empty() {
+            if let Some(story) = st.doc.text_story(t.story, t.cell) {
+                let pi = story.para_at(t.anchor);
+                let pr = story.para_range(pi);
+                if pr.is_empty() { 0..story.len() } else { pr }
+            } else {
+                t.range()
+            }
+        } else {
+            t.range()
+        };
+        return vec![Target { story: t.story, cell: t.cell, range }];
     }
     let mut v: Vec<Target> = Vec::new();
     for id in &st.selection.items {
@@ -866,6 +877,7 @@ pub(crate) fn format_chars(s: &mut Session, attrs: &Value) -> Result<Value> {
 
     let cleared: Vec<String> = attrs.as_object().map(|o| o.iter().filter(|(_, v)| v.is_null()).map(|(k, _)| k.clone()).collect()).unwrap_or_default();
     let targets = format_targets(s);
+    let editor_mode = s.editor_mode;
     s.edit(|d, _| {
         for t in &targets {
             let r = &t.range;
@@ -876,6 +888,13 @@ pub(crate) fn format_chars(s: &mut Session, attrs: &Value) -> Result<Value> {
                 if st.is_empty() {
                     st.chars[0].format.over.merge(&a);
                     st.rev += 1;
+                } else if editor_mode {
+                    st.format_chars(0..st.len(), |f| {
+                        f.over.merge(&a);
+                        for k in &cleared {
+                            let _ = f.over.set_json(k, &Value::Null);
+                        }
+                    });
                 } else {
                     let _ = pos;
                 }
@@ -987,17 +1006,30 @@ fn open_type(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"features": list, "figures": otf::figures(&list)}))
 }
 
-fn selection_attrs(s: &mut Session, _p: &Value) -> Result<Value> {
+fn selection_attrs(s: &mut Session, p: &Value) -> Result<Value> {
     let st = s.doc()?;
-    let targets = format_targets(s);
-    let Some(Target { story: sid, cell, range: r }) = targets.first().cloned() else { return Ok(Value::Null) };
+    let (sid, cell, r) = if let Some(sid_num) = p.get("story").and_then(Value::as_u64) {
+        let sid = designcraft_doc::StoryId(sid_num);
+        let len = st.doc.story(sid).map(|x| x.len()).unwrap_or(0);
+        (sid, None, 0..len)
+    } else {
+        let targets = format_targets(s);
+        let Some(Target { story: sid, cell, range: r }) = targets.first().cloned() else { return Ok(Value::Null) };
+        (sid, cell, r)
+    };
     let story = st.doc.text_story(sid, cell).ok_or(designcraft_doc::DocError::NoStory(sid))?;
     let pi = story.para_at(r.start);
     let pf = &story.paras[pi];
     let (pp, base) = st.doc.styles.resolve_para(pf);
     let cf = if r.is_empty() { story.char_format_at(r.start) } else { story.format_after(r.start) };
     let cp = st.doc.styles.resolve_char(&base, cf);
-    let copyfit = st.doc.styles.resolve_copyfit(&pf.style, &cf.style);
+    let copyfit = st.doc.styles.resolve_copyfit(&pf.style, &cf.style).or_else(|| {
+        if p.get("story").is_some() || st.selection.text.is_none() {
+            story.paras.iter().find_map(|p| st.doc.styles.resolve_copyfit(&p.style, designcraft_doc::NO_CHAR_STYLE))
+        } else {
+            None
+        }
+    });
     Ok(json!({"story": sid.0, "paragraphStyle": pf.style, "characterStyle": cf.style, "para": pp, "chars": cp,
         "paraOverrides": pf.para.count(), "charOverrides": cf.over.count(), "copyfit": copyfit}))
 }

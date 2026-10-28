@@ -169,6 +169,11 @@ pub fn text_attrs(app: &mut DesignApp) -> Option<Value> {
     if v.is_null() { None } else { Some(serde_json::to_value(v).ok()?) }
 }
 
+pub fn story_text_attrs(app: &mut DesignApp, sid: designcraft_doc::StoryId) -> Option<Value> {
+    let v = app.session.execute("type.selectionAttrs", &json!({"story": sid.0})).ok()?;
+    if v.is_null() { None } else { Some(serde_json::to_value(v).ok()?) }
+}
+
 /// Count preflight errors: overset stories (more checks land with the Preflight panel).
 pub fn preflight_errors(app: &DesignApp) -> usize {
     // Memoized per document snapshot (the status bar asks every frame).

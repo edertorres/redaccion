@@ -27,13 +27,68 @@ fn editorial_feedback(app: &DesignApp, ui: &Ui, story: designcraft_doc::StoryId,
     }
 }
 
+fn editorial_number_with_id(ui: &mut Ui, id: &str, key: &str, value: Option<f64>, min: f64, max: f64, suffix: &str) -> Option<f64> {
+    NumField::number(id, value, suffix, 2).width(92.0).spinner().step(if key == "size" { 0.01 } else { 0.1 }).range(min, max).show(ui)
+}
+
+#[cfg(test)]
 fn editorial_number(ui: &mut Ui, key: &str, value: Option<f64>, min: f64, max: f64, suffix: &str) -> Option<f64> {
-    NumField::number(&format!("editor_{key}"), value, suffix, 2)
-        .width(92.0)
-        .spinner()
-        .step(if key == "size" { 0.01 } else { 0.1 })
-        .range(min, max)
-        .show(ui)
+    editorial_number_with_id(ui, &format!("editor_{key}"), key, value, min, max, suffix)
+}
+
+pub(crate) fn show_copyfit_adjustments(
+    app: &mut DesignApp,
+    ui: &mut Ui,
+    sid: designcraft_doc::StoryId,
+    attrs: &serde_json::Value,
+    id_prefix: &str,
+) -> bool {
+    let mut shown = false;
+    for (key, policy, label, suffix) in [
+        ("size", "sizeFlexibility", "Size", " pt"),
+        ("tracking", "trackingFlexibility", "Tracking", ""),
+        ("kerning", "kerningAllowance", "Kerning", ""),
+        ("leading", "leadingFlexibility", "Leading", " pt"),
+    ] {
+        let range = &attrs["copyfit"][policy];
+        let (Some(min), Some(max)) = (range["start"].as_f64(), range["end"].as_f64()) else { continue };
+        if !min.is_finite() || !max.is_finite() || min > max {
+            continue;
+        }
+        shown = true;
+        crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, label));
+        let cur_val = match key {
+            "kerning" => attrs["chars"]["kerning"]["value"].as_f64().or_else(|| attrs["chars"]["kerning"].as_f64()),
+            "leading" => attrs["chars"]["leading"]["value"].as_f64().or_else(|| attrs["chars"]["leading"].as_f64()),
+            _ => attrs["chars"][key].as_f64(),
+        };
+        let field_id = format!("{id_prefix}_{key}");
+        if let Some(value) = editorial_number_with_id(ui, &field_id, key, cur_val, min, max, suffix)
+            && cur_val.is_none_or(|old| (old - value).abs() > 1e-9)
+        {
+            let mut changes = serde_json::Map::new();
+            match key {
+                "kerning" => {
+                    changes.insert(key.into(), json!({"kind": "manual", "value": value}));
+                }
+                "leading" => {
+                    changes.insert(key.into(), json!({"kind": "points", "value": value}));
+                }
+                _ => {
+                    changes.insert(key.into(), json!(value));
+                }
+            }
+            if app.session.active().and_then(|st| st.selection.text).map(|t| t.story) != Some(sid) {
+                let _ = app.run("text.select", json!({"story": sid.0, "anchor": 0, "focus": 0}));
+            }
+            if let Err(error) = app.run("type.char", json!({"attrs": changes})) {
+                editorial_feedback(app, ui, sid, crate::i18n::tr(&app.ui.language, &error).to_string(), true);
+            } else {
+                ui.ctx().data_mut(|data| data.remove::<EditorialFeedback>(egui::Id::new("editorial_feedback")));
+            }
+        }
+    }
+    shown
 }
 
 /// Show the bar under `sel` (screen rect of the selection), kept inside `canvas`.
@@ -147,50 +202,8 @@ fn editorial_controls(app: &mut DesignApp, ui: &mut Ui, text: bool) {
             app.status(message.clone());
             editorial_feedback(app, ui, sid, message, error);
         }
-        if app.session.active().and_then(|st| st.selection.text).is_some_and(|ts| ts.range().is_empty()) {
-            crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, "Select text or its frame to adjust typography"));
-            return;
-        }
         let Some(attrs) = panels::text_attrs(app) else { return };
-        for (key, policy, label, suffix) in [
-            ("size", "sizeFlexibility", "Size", " pt"),
-            ("tracking", "trackingFlexibility", "Tracking", ""),
-            ("kerning", "kerningAllowance", "Kerning", ""),
-            ("leading", "leadingFlexibility", "Leading", " pt"),
-        ] {
-            let range = &attrs["copyfit"][policy];
-            let (Some(min), Some(max)) = (range["start"].as_f64(), range["end"].as_f64()) else { continue };
-            if !min.is_finite() || !max.is_finite() || min > max {
-                continue;
-            }
-            crate::rtl::label(ui, crate::i18n::tr(&app.ui.language, label));
-            let cur_val = match key {
-                "kerning" => attrs["chars"]["kerning"]["value"].as_f64().or_else(|| attrs["chars"]["kerning"].as_f64()),
-                "leading" => attrs["chars"]["leading"]["value"].as_f64().or_else(|| attrs["chars"]["leading"].as_f64()),
-                _ => attrs["chars"][key].as_f64(),
-            };
-            if let Some(value) = editorial_number(ui, key, cur_val, min, max, suffix)
-                && cur_val.is_none_or(|old| (old - value).abs() > 1e-9)
-            {
-                let mut changes = serde_json::Map::new();
-                match key {
-                    "kerning" => {
-                        changes.insert(key.into(), json!({"kind": "manual", "value": value}));
-                    }
-                    "leading" => {
-                        changes.insert(key.into(), json!({"kind": "points", "value": value}));
-                    }
-                    _ => {
-                        changes.insert(key.into(), json!(value));
-                    }
-                }
-                if let Err(error) = app.run("type.char", json!({"attrs": changes})) {
-                    editorial_feedback(app, ui, sid, crate::i18n::tr(&app.ui.language, &error).to_string(), true);
-                } else {
-                    ui.ctx().data_mut(|data| data.remove::<EditorialFeedback>(egui::Id::new("editorial_feedback")));
-                }
-            }
-        }
+        show_copyfit_adjustments(app, ui, sid, &attrs, "editor");
     } else {
         let Some(id) = app.session.active().and_then(|st| st.selection.items.first().copied()) else { return };
         if !app.session.editorial_content_editable(id) {

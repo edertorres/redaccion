@@ -2118,12 +2118,7 @@ pub fn links_panel(app: &mut DesignApp, ui: &mut egui::Ui) {
     };
 
     ui.horizontal(|ui| {
-        crate::rtl::label(
-            ui,
-            egui::RichText::new(format!("{} assets · Total: {}", rows.len(), total_str))
-                .size(11.0)
-                .color(t.text_dim),
-        );
+        crate::rtl::label(ui, egui::RichText::new(format!("{} assets · Total: {}", rows.len(), total_str)).size(11.0).color(t.text_dim));
     });
 
     if unused_count > 0 {
@@ -2278,8 +2273,7 @@ pub fn links_panel(app: &mut DesignApp, ui: &mut egui::Ui) {
 
                     if ui
                         .button(
-                            egui::RichText::new(crate::i18n::tr(&app.ui.language, "Delete Asset"))
-                                .color(egui::Color32::from_rgb(0xe5, 0x4b, 0x4b)),
+                            egui::RichText::new(crate::i18n::tr(&app.ui.language, "Delete Asset")).color(egui::Color32::from_rgb(0xe5, 0x4b, 0x4b)),
                         )
                         .on_hover_text(if is_used {
                             "Removes the asset and clears the placed graphic from frames"
@@ -2310,9 +2304,7 @@ pub fn links_panel(app: &mut DesignApp, ui: &mut egui::Ui) {
     } else {
         crate::rtl::label(
             ui,
-            egui::RichText::new(crate::i18n::tr(&app.ui.language, "Choose a link to inspect or manage."))
-                .color(t.text_dim)
-                .size(11.0),
+            egui::RichText::new(crate::i18n::tr(&app.ui.language, "Choose a link to inspect or manage.")).color(t.text_dim).size(11.0),
         );
     }
 

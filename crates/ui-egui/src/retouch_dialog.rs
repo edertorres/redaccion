@@ -172,12 +172,8 @@ pub fn drain_retouch(app: &mut DesignApp, ctx: &egui::Context) {
         }
         1 => {
             // Step 1: Decode RGBA
-            let decoded = if is_cmyk_tiff(&task.data) {
-                decode_cmyk_tiff(&task.data).map(|r| cmyk_raster_to_display_rgba(&r))
-            } else {
-                None
-            }
-            .or_else(|| decode_rgba(&task.data));
+            let decoded = if is_cmyk_tiff(&task.data) { decode_cmyk_tiff(&task.data).map(|r| cmyk_raster_to_display_rgba(&r)) } else { None }
+                .or_else(|| decode_rgba(&task.data));
 
             match decoded {
                 Some(rgba) => {

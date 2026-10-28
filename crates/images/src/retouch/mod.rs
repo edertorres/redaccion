@@ -51,10 +51,10 @@ impl RotaryPreset {
     /// preventing abrupt raster dropout holes and harsh jagged edges against bare paper.
     pub fn target_highlight_ink(&self) -> f32 {
         match self {
-            Self::ColdsetNewspaper => 0.04,     // 4% highlight dot retention on coldset newsprint
-            Self::ImprovedNewspaperSC => 0.03,  // 3% highlight dot on SC 55g
-            Self::HeatsetMagazine => 0.02,      // 2% highlight dot on LWC/coated
-            Self::CommercialSheetfed => 0.01,   // 1% highlight dot on commercial sheetfed
+            Self::ColdsetNewspaper => 0.04,    // 4% highlight dot retention on coldset newsprint
+            Self::ImprovedNewspaperSC => 0.03, // 3% highlight dot on SC 55g
+            Self::HeatsetMagazine => 0.02,     // 2% highlight dot on LWC/coated
+            Self::CommercialSheetfed => 0.01,  // 1% highlight dot on commercial sheetfed
         }
     }
 
@@ -64,10 +64,10 @@ impl RotaryPreset {
     /// 90%–92% tone value to prevent halftone dot-bridging, ink flooding, smearing and maculatura.
     pub fn target_shadow_ink(&self) -> f32 {
         match self {
-            Self::ColdsetNewspaper => 0.90,     // 90% shadow ceiling (prevents ink bleeding & muddiness)
-            Self::ImprovedNewspaperSC => 0.92,  // 92% shadow ceiling
-            Self::HeatsetMagazine => 0.95,      // 95% shadow ceiling
-            Self::CommercialSheetfed => 0.98,   // 98% shadow ceiling
+            Self::ColdsetNewspaper => 0.90,    // 90% shadow ceiling (prevents ink bleeding & muddiness)
+            Self::ImprovedNewspaperSC => 0.92, // 92% shadow ceiling
+            Self::HeatsetMagazine => 0.95,     // 95% shadow ceiling
+            Self::CommercialSheetfed => 0.98,  // 98% shadow ceiling
         }
     }
 
@@ -77,10 +77,10 @@ impl RotaryPreset {
     /// Without midtone gamma lift (1.20–1.24), photos print disastrously dark, murky and muddy.
     pub fn midtone_gamma(&self) -> f32 {
         match self {
-            Self::ColdsetNewspaper => 1.22,     // Compensates for ~28% coldset TVI
-            Self::ImprovedNewspaperSC => 1.16,  // Compensates for ~24% SC TVI
-            Self::HeatsetMagazine => 1.10,      // Compensates for ~18% heatset TVI
-            Self::CommercialSheetfed => 1.04,   // Compensates for ~14% sheetfed TVI
+            Self::ColdsetNewspaper => 1.22,    // Compensates for ~28% coldset TVI
+            Self::ImprovedNewspaperSC => 1.16, // Compensates for ~24% SC TVI
+            Self::HeatsetMagazine => 1.10,     // Compensates for ~18% heatset TVI
+            Self::CommercialSheetfed => 1.04,  // Compensates for ~14% sheetfed TVI
         }
     }
 

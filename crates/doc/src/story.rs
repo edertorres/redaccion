@@ -186,6 +186,11 @@ impl Story {
         v
     }
 
+    /// Byte range of paragraph index `pi`.
+    pub fn para_range(&self, pi: usize) -> std::ops::Range<usize> {
+        self.para_ranges().get(pi).cloned().unwrap_or(0..self.text.len())
+    }
+
     /// Index of the paragraph containing byte `pos`.
     pub fn para_at(&self, pos: usize) -> usize {
         self.text[..floor_char_boundary(&self.text, pos)].bytes().filter(|b| *b == b'\n').count()

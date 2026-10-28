@@ -274,6 +274,18 @@ fn show_inner(app: &mut DesignApp, ui: &mut egui::Ui) {
         }
     });
     ui.add_space(4.0);
+    if is_editor && content_editable {
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Microfit Text"))).clicked() {
+                let _ = app.run("text.microfit", serde_json::json!({"story": sid.0, "max_excess_words": 50}));
+            }
+            if let Some(attrs) = crate::panels::story_text_attrs(app, sid) {
+                crate::taskbar::show_copyfit_adjustments(app, ui, sid, &attrs, "se_cf");
+            }
+        });
+        ui.add_space(4.0);
+    }
     if !content_editable {
         crate::rtl::label(ui, egui::RichText::new(crate::i18n::tr(&app.ui.language, "Protected content")).strong().color(t.text_dim));
     }

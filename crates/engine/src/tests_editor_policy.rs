@@ -156,6 +156,34 @@ fn copyfit_requires_explicit_limits_and_checks_every_paragraph() {
 }
 
 #[test]
+fn caret_typography_adjustments_obey_copyfit_policy_in_editor_mode() {
+    let (mut s, text, _) = setup();
+    let sid = text["story"].as_u64().unwrap();
+    s.execute("style.paragraph.create", &json!({"name":"Headline"})).unwrap();
+    s.execute("style.paragraph.edit", &json!({"name":"Headline","copyfit":{"size_min":20,"size_max":26,"trk_min":-10,"trk_max":10}})).unwrap();
+    s.execute("story.update", &json!({"story":sid,"text":"Headline Text"})).unwrap();
+    s.execute("text.select", &json!({"story":sid,"anchor":0,"focus":13})).unwrap();
+    s.execute("style.paragraph.apply", &json!({"name":"Headline"})).unwrap();
+
+    // Redactor places caret inside the word "Headline" (anchor == focus)
+    s.execute("text.select", &json!({"story":sid,"anchor":4,"focus":4})).unwrap();
+    s.editor_mode = true;
+
+    // Adjusting size within tolerance succeeds and applies to the paragraph
+    s.execute("type.char", &json!({"attrs":{"size":24.0}})).unwrap();
+    let attrs = s.execute("type.selectionAttrs", &json!({})).unwrap();
+    assert_eq!(attrs["chars"]["size"], 24.0);
+
+    // Adjusting tracking within tolerance succeeds
+    s.execute("type.char", &json!({"attrs":{"tracking":-5.0}})).unwrap();
+    let attrs2 = s.execute("type.selectionAttrs", &json!({})).unwrap();
+    assert_eq!(attrs2["chars"]["tracking"], -5.0);
+
+    // Adjusting size outside tolerance is rejected
+    unchanged_after_rejection(&mut s, "type.char", json!({"attrs":{"size":30.0}}));
+}
+
+#[test]
 fn locked_layers_are_read_only_but_view_rotation_and_copyfit_still_work() {
     let (mut s, text, _) = setup();
     let sid = StoryId(text["story"].as_u64().unwrap());

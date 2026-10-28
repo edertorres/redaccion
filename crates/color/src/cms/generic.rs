@@ -204,11 +204,7 @@ impl GenericCmyk {
         let bp = self.black_rel;
         let x_bpc = [0, 1, 2].map(|i| {
             let den = 1.0 - bp[i] / D50[i];
-            if den.abs() > 1e-4 {
-                ((x[i] - bp[i]) / den).clamp(0.0, D50[i])
-            } else {
-                x[i]
-            }
+            if den.abs() > 1e-4 { ((x[i] - bp[i]) / den).clamp(0.0, D50[i]) } else { x[i] }
         });
         xyz_to_srgb(x_bpc)
     }
