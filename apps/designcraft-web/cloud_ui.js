@@ -236,6 +236,31 @@ export function initCloudUI() {
         height: 22px;
         border-radius: 50%;
       }
+      #cloud-save-pill-btn {
+        position: fixed;
+        top: 10px;
+        right: 180px;
+        z-index: 9999;
+        display: none;
+        align-items: center;
+        gap: 6px;
+        background: #16a34a;
+        color: #ffffff;
+        border: 1px solid #15803d;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);
+        transition: all 0.2s ease;
+      }
+      #cloud-save-pill-btn:hover {
+        background: #15803d;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(22, 163, 74, 0.35);
+      }
       #cloud-modal-overlay {
         display: none;
         position: fixed;
@@ -1018,6 +1043,10 @@ export function initCloudUI() {
       }
     </style>
 
+    <button id="cloud-save-pill-btn" title="Guardar Maqueta y PDF en Google Drive">
+      <span>💾</span>
+      <span>Guardar en Drive</span>
+    </button>
     <button id="cloud-pill-btn" title="Nube Editorial Google Drive">
       <span id="cloud-pill-icon">☁</span>
       <span id="cloud-pill-text">Google Drive</span>
@@ -1032,7 +1061,7 @@ export function initCloudUI() {
           <button class="cloud-modal-close" id="cloud-modal-close-btn">&times;</button>
         </div>
 
-        <div class="cloud-tabs" id="cloud-tabs-bar" style="display: none;">
+        <div class="cloud-tabs" id="cloud-tabs-bar">
           <button class="cloud-tab-btn active" data-tab="templates">📂 1. Elegir Plantilla (Maqueta)</button>
           <button class="cloud-tab-btn" data-tab="save">💾 2. Guardar en Edición del Día</button>
         </div>
@@ -1065,10 +1094,29 @@ export function initCloudUI() {
   document.body.appendChild(container);
 
   const pillBtn = document.getElementById('cloud-pill-btn');
+  const savePillBtn = document.getElementById('cloud-save-pill-btn');
   const overlay = document.getElementById('cloud-modal-overlay');
   const closeBtn = document.getElementById('cloud-modal-close-btn');
   const modalContent = document.getElementById('cloud-modal-content');
   const tabsBar = document.getElementById('cloud-tabs-bar');
+
+  const hasActiveDoc = () => {
+    const q = new URLSearchParams(window.location.search);
+    return Boolean(q.get('doc') || q.get('template'));
+  };
+
+  if (savePillBtn) {
+    if (hasActiveDoc()) {
+      savePillBtn.style.display = 'flex';
+    }
+    savePillBtn.addEventListener('click', () => {
+      if (!window.DesignCraftCloud?.authState?.isAuthenticated) {
+        window.DesignCraftCloud?.signIn('consent');
+        return;
+      }
+      openModal('save');
+    });
+  }
 
   let currentTab = 'templates'; // 'templates' | 'save'
   let cachedTemplates = [];
@@ -1499,10 +1547,22 @@ export function initCloudUI() {
     return window.btoa(binary);
   }
 
-  const openModal = () => {
+  const openModal = (tab) => {
+    if (tab) {
+      currentTab = tab;
+    } else if (hasActiveDoc()) {
+      currentTab = 'save';
+    }
+    tabsBar.querySelectorAll('.cloud-tab-btn').forEach(b => {
+      if (b.dataset.tab === currentTab) b.classList.add('active');
+      else b.classList.remove('active');
+    });
     overlay.classList.add('open');
     renderModal();
   };
+  window.openDesignCraftCloudModal = openModal;
+  window.openDesignCraftSave = () => openModal('save');
+  window.openDesignCraftTemplates = () => openModal('templates');
   const closeModal = () => {
     overlay.classList.remove('open');
     hideHoverPreview();
@@ -1586,7 +1646,11 @@ export function initCloudUI() {
         : 'Guardar en Edición del Día';
     }
 
-    tabsBar.style.display = currentTab === 'save' ? 'flex' : 'none';
+    tabsBar.style.display = 'flex';
+    tabsBar.querySelectorAll('.cloud-tab-btn').forEach(b => {
+      if (b.dataset.tab === currentTab) b.classList.add('active');
+      else b.classList.remove('active');
+    });
 
     if (currentTab === 'templates') {
       renderTemplatesTab();
