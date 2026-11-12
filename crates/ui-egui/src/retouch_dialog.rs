@@ -539,7 +539,7 @@ mod tests {
 
     fn base64_encode(data: &[u8]) -> String {
         const CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+        let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
         for chunk in data.chunks(3) {
             let b0 = chunk[0];
             let b1 = chunk.get(1).copied().unwrap_or(0);
@@ -595,14 +595,14 @@ mod tests {
         // Advance frames through the state machine
         for _ in 0..10 {
             drain_retouch(&mut app, &ctx);
-            if let Some(ref p) = app.retouch_progress {
-                if p.done {
-                    assert!(p.stats.is_some());
-                    let st = p.stats.as_ref().unwrap();
-                    assert!(st.max_tac <= 220.5);
-                    assert_eq!(st.exceeding_pixels, 0);
-                    break;
-                }
+            if let Some(ref p) = app.retouch_progress
+                && p.done
+            {
+                assert!(p.stats.is_some());
+                let st = p.stats.as_ref().unwrap();
+                assert!(st.max_tac <= 220.5);
+                assert_eq!(st.exceeding_pixels, 0);
+                break;
             }
         }
 

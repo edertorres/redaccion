@@ -68,6 +68,48 @@ fn load_env_var(key: &str) -> Option<String> {
     None
 }
 
+fn resolve_user_role(email: &str) -> &'static str {
+    let email = email.trim().to_lowercase();
+    if email.is_empty() {
+        return "editor";
+    }
+
+    if let Some(admins) = load_env_var("DC_ADMINS") {
+        for a in admins.split(',') {
+            if a.trim().to_lowercase() == email {
+                return "admin";
+            }
+        }
+    }
+
+    if let Some(designers) = load_env_var("DC_DESIGNERS") {
+        for d in designers.split(',') {
+            if d.trim().to_lowercase() == email {
+                return "designer";
+            }
+        }
+    }
+
+    let def = load_env_var("DC_DEFAULT_ROLE").unwrap_or_else(|| "editor".to_string());
+    match def.trim().to_lowercase().as_str() {
+        "admin" => "admin",
+        "designer" => "designer",
+        _ => "editor",
+    }
+}
+
+fn extract_query_param<'a>(raw_path: &'a str, param: &str) -> Option<&'a str> {
+    let (_, query) = raw_path.split_once('?')?;
+    for pair in query.split('&') {
+        if let Some((k, v)) = pair.split_once('=')
+            && k == param
+        {
+            return Some(v);
+        }
+    }
+    None
+}
+
 #[derive(Clone)]
 struct CachedFont {
     filename: String,
@@ -253,6 +295,17 @@ fn handle_connection(
         match rest {
             "health" => {
                 let body = json!({"status": "ok", "version": env!("CARGO_PKG_VERSION")}).to_string();
+                send_response(&mut stream, 200, "OK", "application/json", body.as_bytes())?;
+            }
+            "auth/role" if method == "GET" || method == "HEAD" => {
+                let raw_email = extract_query_param(raw_path, "email").unwrap_or("");
+                let decoded_email = url_decode(raw_email);
+                let role = resolve_user_role(&decoded_email);
+                let body = json!({
+                    "email": decoded_email,
+                    "role": role,
+                })
+                .to_string();
                 send_response(&mut stream, 200, "OK", "application/json", body.as_bytes())?;
             }
             "cloud/config" if method == "GET" || method == "HEAD" => {
@@ -964,11 +1017,26 @@ fn route_document_request(
         [_, "copyfit"] if method == "GET" || method == "HEAD" => {
             handle_copyfit_status(stream, docs, &clean_id)?;
         }
+        [_, "editorial"] if method == "GET" || method == "HEAD" => {
+            handle_editorial_status(stream, docs, &clean_id)?;
+        }
         [_, "pdf"] if method == "GET" || method == "HEAD" => {
             handle_document_pdf(stream, docs, &clean_id, sub)?;
         }
         [_, "idml"] if method == "GET" || method == "HEAD" => {
             handle_document_idml(stream, docs, &clean_id)?;
+        }
+        [_, "backups"] if method == "GET" || method == "HEAD" => {
+            handle_document_backups_list(stream, docs, &clean_id)?;
+        }
+        [_, "backups", "restore"] if method == "POST" => {
+            handle_document_backups_restore(reader, stream, docs, locks, &clean_id, content_length)?;
+        }
+        [_, "backups", "prune"] if method == "POST" => {
+            handle_document_backups_prune(reader, stream, docs, &clean_id, content_length)?;
+        }
+        [_, "backups", "checkpoint"] if method == "POST" => {
+            handle_document_backups_checkpoint(reader, stream, docs, locks, &clean_id, content_length)?;
         }
         _ => {
             let err = json!({"error": format!("unknown endpoint `/api/documents/{sub}`")}).to_string();
@@ -1276,6 +1344,26 @@ fn handle_copyfit_status(stream: &mut TcpStream, dir: &Path, clean_id: &str) -> 
     }
 }
 
+fn handle_editorial_status(stream: &mut TcpStream, dir: &Path, clean_id: &str) -> Result<(), String> {
+    let (mut session, _) = match load_doc_session(dir, clean_id) {
+        Ok(s) => s,
+        Err((code, status, msg)) => {
+            let err = json!({"error": msg}).to_string();
+            return send_response(stream, code, status, "application/json", err.as_bytes());
+        }
+    };
+    match session.execute("page.editorial.overview", &json!({})) {
+        Ok(val) => {
+            let body = serde_json::to_string(&val).map_err(|e| e.to_string())?;
+            send_response(stream, 200, "OK", "application/json", body.as_bytes())
+        }
+        Err(e) => {
+            let err = json!({"error": format!("failed getting editorial status: {e}")}).to_string();
+            send_response(stream, 500, "Internal Server Error", "application/json", err.as_bytes())
+        }
+    }
+}
+
 fn handle_document_pdf(stream: &mut TcpStream, dir: &Path, clean_id: &str, query: &str) -> Result<(), String> {
     let (mut session, _) = match load_doc_session(dir, clean_id) {
         Ok(s) => s,
@@ -1376,6 +1464,214 @@ fn handle_document_idml(stream: &mut TcpStream, dir: &Path, clean_id: &str) -> R
     stream.flush().map_err(|e| e.to_string())
 }
 
+fn should_create_doc_snapshot(backups_dir: &Path, clean_id: &str, now: u64, min_interval_secs: u64) -> bool {
+    let Ok(rd) = fs::read_dir(backups_dir) else { return true };
+    let prefix = format!("{clean_id}_");
+    let mut latest_ts: u64 = 0;
+    for entry in rd.flatten() {
+        let fname = entry.file_name().to_string_lossy().to_string();
+        if let Some(rest) = fname.strip_prefix(&prefix).and_then(|s| s.strip_suffix(".designcraft")) {
+            let ts_str = rest.split('_').next().unwrap_or("");
+            if let Ok(ts) = ts_str.parse::<u64>()
+                && ts > latest_ts
+            {
+                latest_ts = ts;
+            }
+        }
+    }
+    if latest_ts == 0 {
+        return true;
+    }
+    now.saturating_sub(latest_ts) >= min_interval_secs
+}
+
+fn prune_doc_backups(backups_dir: &Path, clean_id: &str, now: u64) {
+    let Ok(rd) = fs::read_dir(backups_dir) else { return };
+    let prefix = format!("{clean_id}_");
+    let mut entries = Vec::new();
+    for entry in rd.flatten() {
+        let fname = entry.file_name().to_string_lossy().to_string();
+        if let Some(rest) = fname.strip_prefix(&prefix).and_then(|s| s.strip_suffix(".designcraft")) {
+            let (ts_str, label) = if let Some((ts, lbl)) = rest.split_once('_') { (ts, Some(lbl.to_string())) } else { (rest, None) };
+            if let Ok(ts) = ts_str.parse::<u64>() {
+                let is_milestone = label.as_deref().is_some_and(|l| {
+                    let low = l.to_ascii_lowercase();
+                    low.contains("cierre") || low.contains("hito") || low.contains("milestone") || low.contains("aprobado")
+                });
+                entries.push((entry.path(), ts, is_milestone));
+            }
+        }
+    }
+    entries.sort_by_key(|a| std::cmp::Reverse(a.1));
+
+    let mut kept_timestamps: Vec<u64> = Vec::new();
+    for (idx, (path, ts, is_milestone)) in entries.into_iter().enumerate() {
+        if idx < 5 || is_milestone {
+            kept_timestamps.push(ts);
+            continue;
+        }
+        let age_secs = now.saturating_sub(ts);
+        let should_prune = if age_secs < 900 {
+            kept_timestamps.iter().any(|&k| (k as i64 - ts as i64).abs() < 120)
+        } else if age_secs < 7200 {
+            kept_timestamps.iter().any(|&k| (k as i64 - ts as i64).abs() < 600)
+        } else if age_secs < 86400 {
+            kept_timestamps.iter().any(|&k| (k as i64 - ts as i64).abs() < 3600)
+        } else {
+            age_secs > 7 * 86400 || kept_timestamps.iter().any(|&k| (k as i64 - ts as i64).abs() < 86400)
+        };
+
+        if should_prune {
+            let _ = fs::remove_file(path);
+        } else {
+            kept_timestamps.push(ts);
+        }
+    }
+}
+
+fn handle_document_backups_list(stream: &mut TcpStream, dir: &Path, clean_id: &str) -> Result<(), String> {
+    let backups_dir = dir.join(".backups");
+    let mut list = Vec::new();
+    if backups_dir.is_dir()
+        && let Ok(rd) = fs::read_dir(&backups_dir)
+    {
+        let prefix = format!("{clean_id}_");
+        for entry in rd.flatten() {
+            let fname = entry.file_name().to_string_lossy().to_string();
+            if let Some(rest) = fname.strip_prefix(&prefix).and_then(|s| s.strip_suffix(".designcraft")) {
+                let (ts_str, label) = if let Some((ts, lbl)) = rest.split_once('_') { (ts, Some(lbl.to_string())) } else { (rest, None) };
+                let meta = entry.metadata().ok();
+                let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+                let ts = ts_str.parse::<u64>().unwrap_or_else(|_| {
+                    meta.and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0)
+                });
+                let is_milestone = label.as_deref().is_some_and(|l| {
+                    let low = l.to_ascii_lowercase();
+                    low.contains("cierre") || low.contains("hito") || low.contains("milestone") || low.contains("aprobado")
+                });
+                let formatted_date = designcraft_doc::vars::format_date(ts as i64, "yyyy-MM-dd");
+                let formatted_time = designcraft_doc::vars::format_date(ts as i64, "HH:mm:ss");
+                list.push(json!({
+                    "filename": fname,
+                    "timestamp": ts,
+                    "formattedDate": formatted_date,
+                    "formattedTime": formatted_time,
+                    "size": size,
+                    "label": label.unwrap_or_else(|| "Autoguardado".into()),
+                    "isMilestone": is_milestone,
+                }));
+            }
+        }
+    }
+    list.sort_by_key(|a| std::cmp::Reverse(a["timestamp"].as_u64().unwrap_or(0)));
+    let body = serde_json::to_string(&list).map_err(|e| e.to_string())?;
+    send_response(stream, 200, "OK", "application/json", body.as_bytes())
+}
+
+fn handle_document_backups_restore(
+    reader: &mut impl Read,
+    stream: &mut TcpStream,
+    dir: &Path,
+    locks: &DocLocks,
+    clean_id: &str,
+    len: usize,
+) -> Result<(), String> {
+    if len > 64 * 1024 {
+        let err = json!({"error": "payload too large"}).to_string();
+        return send_response(stream, 413, "Payload Too Large", "application/json", err.as_bytes());
+    }
+    let mut body = vec![0u8; len];
+    reader.read_exact(&mut body).map_err(|e| format!("failed reading body: {e}"))?;
+    let val: serde_json::Value = serde_json::from_slice(&body).map_err(|e| format!("invalid json: {e}"))?;
+    let fname = val.get("filename").and_then(serde_json::Value::as_str).ok_or_else(|| "missing filename".to_string())?;
+    if fname.is_empty() || fname.contains('/') || fname.contains('\\') || fname.contains("..") || !fname.ends_with(".designcraft") {
+        let err = json!({"error": "invalid backup filename"}).to_string();
+        return send_response(stream, 400, "Bad Request", "application/json", err.as_bytes());
+    }
+
+    let backups_dir = dir.join(".backups");
+    let backup_file = backups_dir.join(fname);
+    if !backup_file.is_file() || !fname.starts_with(&format!("{clean_id}_")) {
+        let err = json!({"error": "backup file not found"}).to_string();
+        return send_response(stream, 404, "Not Found", "application/json", err.as_bytes());
+    }
+
+    let doc_lock = get_doc_lock(locks, clean_id);
+    let _guard = doc_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+
+    let target_path = dir.join(format!("{clean_id}.designcraft"));
+    let now = current_unix_timestamp();
+    if target_path.is_file() {
+        let safety_file = backups_dir.join(format!("{clean_id}_{now}_pre_restore.designcraft"));
+        let _ = fs::copy(&target_path, safety_file);
+    }
+
+    let cnt = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let tmp_path = dir.join(format!("{clean_id}.tmp-{}-{cnt}", std::process::id()));
+    fs::copy(&backup_file, &tmp_path).map_err(|e| format!("cannot copy backup to tmp: {e}"))?;
+    fs::rename(&tmp_path, &target_path).map_err(|e| format!("cannot rename to target: {e}"))?;
+
+    let res = json!({
+        "restored": true,
+        "filename": fname,
+        "timestamp": now,
+    })
+    .to_string();
+    send_response(stream, 200, "OK", "application/json", res.as_bytes())
+}
+
+fn handle_document_backups_prune(_reader: &mut impl Read, stream: &mut TcpStream, dir: &Path, clean_id: &str, _len: usize) -> Result<(), String> {
+    let backups_dir = dir.join(".backups");
+    let now = current_unix_timestamp();
+    prune_doc_backups(&backups_dir, clean_id, now);
+    let res = json!({"pruned": true}).to_string();
+    send_response(stream, 200, "OK", "application/json", res.as_bytes())
+}
+
+fn handle_document_backups_checkpoint(
+    reader: &mut impl Read,
+    stream: &mut TcpStream,
+    dir: &Path,
+    locks: &DocLocks,
+    clean_id: &str,
+    len: usize,
+) -> Result<(), String> {
+    if len > 64 * 1024 {
+        let err = json!({"error": "payload too large"}).to_string();
+        return send_response(stream, 413, "Payload Too Large", "application/json", err.as_bytes());
+    }
+    let mut body = vec![0u8; len];
+    reader.read_exact(&mut body).map_err(|e| format!("failed reading body: {e}"))?;
+    let val: serde_json::Value = serde_json::from_slice(&body).unwrap_or(json!({}));
+    let label = val.get("label").and_then(serde_json::Value::as_str).unwrap_or("cierre");
+    let safe_label: String = label.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
+
+    let doc_lock = get_doc_lock(locks, clean_id);
+    let _guard = doc_lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+
+    let target_path = dir.join(format!("{clean_id}.designcraft"));
+    if !target_path.is_file() {
+        let err = json!({"error": "document file not found"}).to_string();
+        return send_response(stream, 404, "Not Found", "application/json", err.as_bytes());
+    }
+
+    let backups_dir = dir.join(".backups");
+    fs::create_dir_all(&backups_dir).map_err(|e| e.to_string())?;
+    let now = current_unix_timestamp();
+    let fname = format!("{clean_id}_{now}_{safe_label}.designcraft");
+    let checkpoint_file = backups_dir.join(&fname);
+    fs::copy(&target_path, &checkpoint_file).map_err(|e| e.to_string())?;
+
+    let res = json!({
+        "checkpoint": true,
+        "filename": fname,
+        "timestamp": now,
+        "label": label,
+    })
+    .to_string();
+    send_response(stream, 200, "OK", "application/json", res.as_bytes())
+}
+
 fn save_document(
     reader: &mut impl Read,
     stream: &mut TcpStream,
@@ -1404,13 +1700,16 @@ fn save_document(
     let cnt = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let tmp_path = dir.join(format!("{clean_id}.tmp-{}-{cnt}", std::process::id()));
 
-    // Automatic recovery snapshot of previous version before atomic overwrite
+    // Automatic recovery snapshot of previous version before atomic overwrite with smart throttling
     if target_path.is_file() {
         let backups_dir = dir.join(".backups");
         if fs::create_dir_all(&backups_dir).is_ok() {
             let now = current_unix_timestamp();
-            let backup_path = backups_dir.join(format!("{clean_id}_{now}.designcraft"));
-            let _ = fs::copy(&target_path, backup_path);
+            if should_create_doc_snapshot(&backups_dir, &clean_id, now, 180) {
+                let backup_path = backups_dir.join(format!("{clean_id}_{now}.designcraft"));
+                let _ = fs::copy(&target_path, backup_path);
+                prune_doc_backups(&backups_dir, &clean_id, now);
+            }
         }
     }
 
@@ -1653,6 +1952,7 @@ fn mime_for_ext(ext: &str) -> &'static str {
         "js" => "application/javascript; charset=utf-8",
         "css" => "text/css; charset=utf-8",
         "json" => "application/json",
+        "webmanifest" => "application/manifest+json",
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
         "svg" => "image/svg+xml",

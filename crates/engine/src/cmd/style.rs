@@ -118,6 +118,17 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             edit_char
         ),
+        cmd!("style.character.delete", "Delete Character Style", [], None, "{name, replaceWith?}", has_doc, delete_char),
+        cmd!(query "style.unused", "List Unused Styles", [], None, "{kind?: \"paragraph\"|\"character\"|\"all\"} → {paragraph, character}", has_doc, list_unused),
+        cmd!(
+            "style.deleteUnused",
+            "Delete Unused Styles",
+            [],
+            None,
+            "{kind?: \"paragraph\"|\"character\"|\"all\"} → {paragraph, character, deleted}",
+            has_doc,
+            delete_unused
+        ),
         cmd!(query "style.list", "List Styles", [], None, "{} → paragraph and character style names", has_doc, |s, _| {
             let st = s.doc()?;
             Ok(json!({
@@ -747,17 +758,399 @@ fn delete_para(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad("style.paragraph.delete", "built-in styles can't be deleted"));
     }
     s.edit(|d, _| {
-        d.styles_mut().paragraph.retain(|x| x.name != name);
-        for sid in d.stories.keys().copied().collect::<Vec<_>>() {
-            if let Some(story) = d.story_mut(sid) {
-                for f in &mut story.paras {
+        if d.styles.para(&name).is_none() {
+            return Err(bad("style.paragraph.delete", format!("no style `{name}`")));
+        }
+        remove_para_style_refs(d, &name, &repl);
+        ok()
+    })
+}
+
+fn delete_char(s: &mut Session, p: &Value) -> Result<Value> {
+    let name = str_param(p, "name").unwrap_or("").to_string();
+    let repl = str_param(p, "replaceWith").unwrap_or(designcraft_doc::NO_CHAR_STYLE).to_string();
+    if name.starts_with('[') {
+        return Err(bad("style.character.delete", "built-in styles can't be deleted"));
+    }
+    s.edit(|d, _| {
+        if d.styles.char_style(&name).is_none() {
+            return Err(bad("style.character.delete", format!("no style `{name}`")));
+        }
+        remove_char_style_refs(d, &name, &repl);
+        ok()
+    })
+}
+
+fn remove_para_style_refs(d: &mut designcraft_doc::Document, name: &str, repl: &str) {
+    {
+        let st = d.styles_mut();
+        st.paragraph.retain(|x| x.name != name);
+        st.export_tags.remove(&format!("p:{name}"));
+        if st.default_paragraph == name {
+            st.default_paragraph = repl.to_string();
+        }
+        for s in &mut st.paragraph {
+            if s.based_on.as_deref() == Some(name) {
+                s.based_on = None;
+            }
+            if s.next_style.as_deref() == Some(name) {
+                s.next_style = None;
+            }
+        }
+        for o in &mut st.object {
+            if o.paragraph_style.as_deref() == Some(name) {
+                o.paragraph_style = Some(repl.to_string());
+            }
+        }
+        for c in &mut st.cell {
+            if c.paragraph_style.as_deref() == Some(name) {
+                c.paragraph_style = Some(repl.to_string());
+            }
+        }
+    }
+    for sid in d.stories.keys().copied().collect::<Vec<_>>() {
+        if let Some(story) = d.story_mut(sid) {
+            story.for_each_text_mut(&mut |st| {
+                for f in &mut st.paras {
                     if f.style == name {
-                        f.style = repl.clone();
+                        f.style = repl.to_string();
                     }
+                }
+                st.rev += 1;
+            });
+        }
+    }
+}
+
+fn replace_char_refs_in_para_attrs(pa: &mut designcraft_doc::ParaAttrs, name: &str, repl: &str) {
+    let target = if repl == designcraft_doc::NO_CHAR_STYLE { "" } else { repl };
+    if let Some(ns) = &mut pa.nested_styles {
+        for s in ns {
+            if s.style == name {
+                s.style = target.to_string();
+            }
+        }
+    }
+    if let Some(gs) = &mut pa.grep_styles {
+        for s in gs {
+            if s.style == name {
+                s.style = target.to_string();
+            }
+        }
+    }
+    if let Some(nls) = &mut pa.nested_line_styles {
+        for s in nls {
+            if s.style == name {
+                s.style = target.to_string();
+            }
+        }
+    }
+    if pa.bullet_char_style.as_deref() == Some(name) {
+        pa.bullet_char_style = Some(target.to_string());
+    }
+}
+
+fn remove_char_style_refs(d: &mut designcraft_doc::Document, name: &str, repl: &str) {
+    {
+        let st = d.styles_mut();
+        st.character.retain(|x| x.name != name);
+        st.export_tags.remove(&format!("c:{name}"));
+        if st.default_character == name {
+            st.default_character = repl.to_string();
+        }
+        for s in &mut st.character {
+            if s.based_on.as_deref() == Some(name) {
+                s.based_on = None;
+            }
+        }
+        for p in &mut st.paragraph {
+            replace_char_refs_in_para_attrs(&mut p.para, name, repl);
+        }
+    }
+    if d.footnote_options.ref_char_style == name {
+        d.footnote_options.ref_char_style = repl.to_string();
+    }
+    for sid in d.stories.keys().copied().collect::<Vec<_>>() {
+        if let Some(story) = d.story_mut(sid) {
+            story.for_each_text_mut(&mut |st| {
+                for r in &mut st.chars {
+                    if r.format.style == name {
+                        r.format.style = repl.to_string();
+                    }
+                }
+                for p in &mut st.paras {
+                    replace_char_refs_in_para_attrs(&mut p.para, name, repl);
+                }
+                st.rev += 1;
+            });
+        }
+    }
+}
+
+fn collect_para_attrs_char_styles(pa: &designcraft_doc::ParaAttrs, used_char: &mut std::collections::HashSet<String>) {
+    if let Some(ns) = &pa.nested_styles {
+        for s in ns {
+            if !s.style.is_empty() {
+                used_char.insert(s.style.clone());
+            }
+        }
+    }
+    if let Some(gs) = &pa.grep_styles {
+        for s in gs {
+            if !s.style.is_empty() {
+                used_char.insert(s.style.clone());
+            }
+        }
+    }
+    if let Some(nls) = &pa.nested_line_styles {
+        for s in nls {
+            if !s.style.is_empty() {
+                used_char.insert(s.style.clone());
+            }
+        }
+    }
+    if let Some(bcs) = &pa.bullet_char_style
+        && !bcs.is_empty()
+    {
+        used_char.insert(bcs.clone());
+    }
+}
+
+/// Collect all paragraph and character styles actively used (directly or transitively) in `d`.
+fn used_styles(d: &designcraft_doc::Document) -> (std::collections::HashSet<String>, std::collections::HashSet<String>) {
+    use std::collections::HashSet;
+    let mut used_para: HashSet<String> = HashSet::new();
+    let mut used_char: HashSet<String> = HashSet::new();
+
+    used_para.insert(d.styles.default_paragraph.clone());
+    used_char.insert(d.styles.default_character.clone());
+
+    used_para.insert(d.footnote_options.para_style.clone());
+    used_char.insert(d.footnote_options.ref_char_style.clone());
+    used_para.insert(d.endnote_options.heading_style.clone());
+    used_para.insert(d.endnote_options.para_style.clone());
+
+    if let Some(toc) = &d.toc {
+        for entry in &toc.entries {
+            used_para.insert(entry.style.clone());
+        }
+    }
+    for (style_name, _) in &d.xml.style_map {
+        used_para.insert(style_name.clone());
+    }
+
+    let mut used_obj: HashSet<String> = HashSet::new();
+    used_obj.insert(d.styles.default_text_frame.clone());
+    used_obj.insert(d.styles.default_graphic_frame.clone());
+    for sp in d.spreads.iter().chain(d.parents.iter()) {
+        for it in &sp.items {
+            it.walk(&mut |i| {
+                if !i.object_style.is_empty() {
+                    used_obj.insert(i.object_style.clone());
+                }
+            });
+        }
+    }
+
+    let mut used_cell: HashSet<String> = HashSet::new();
+    let mut used_table: HashSet<String> = HashSet::new();
+    for story in d.stories.values() {
+        for obj in &story.objects {
+            obj.item.walk(&mut |i| {
+                if !i.object_style.is_empty() {
+                    used_obj.insert(i.object_style.clone());
+                }
+            });
+        }
+        for table in story.tables.values() {
+            if !table.style.is_empty() {
+                used_table.insert(table.style.clone());
+            }
+            for cell in &table.cells {
+                if !cell.style.is_empty() {
+                    used_cell.insert(cell.style.clone());
                 }
             }
         }
-        ok()
+        story.for_each_text(&mut |st| {
+            for p in &st.paras {
+                if !p.style.is_empty() {
+                    used_para.insert(p.style.clone());
+                }
+                collect_para_attrs_char_styles(&p.para, &mut used_char);
+            }
+            for c in &st.chars {
+                if !c.format.style.is_empty() {
+                    used_char.insert(c.format.style.clone());
+                }
+            }
+        });
+    }
+
+    loop {
+        let mut changed = false;
+        for os in &d.styles.object {
+            if used_obj.contains(&os.name) {
+                if let Some(b) = &os.based_on
+                    && used_obj.insert(b.clone())
+                {
+                    changed = true;
+                }
+                if let Some(ps) = &os.paragraph_style
+                    && used_para.insert(ps.clone())
+                {
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    for ts in &d.styles.table {
+        if used_table.contains(&ts.name) {
+            for r in [&ts.header, &ts.body, &ts.footer, &ts.left_column, &ts.right_column].into_iter().flatten() {
+                used_cell.insert(r.clone());
+            }
+        }
+    }
+    for cs in &d.styles.cell {
+        if used_cell.contains(&cs.name)
+            && let Some(ps) = &cs.paragraph_style
+        {
+            used_para.insert(ps.clone());
+        }
+    }
+
+    // Transitive closure over ParagraphStyle & CharacterStyle inheritance and embedded char styles.
+    loop {
+        let mut changed = false;
+        for ps in &d.styles.paragraph {
+            if used_para.contains(&ps.name) {
+                if let Some(b) = &ps.based_on
+                    && used_para.insert(b.clone())
+                {
+                    changed = true;
+                }
+                if let Some(n) = &ps.next_style
+                    && n != "[Same Style]"
+                    && used_para.insert(n.clone())
+                {
+                    changed = true;
+                }
+                let prev_len = used_char.len();
+                collect_para_attrs_char_styles(&ps.para, &mut used_char);
+                if used_char.len() != prev_len {
+                    changed = true;
+                }
+            }
+        }
+        for cs in &d.styles.character {
+            if used_char.contains(&cs.name)
+                && let Some(b) = &cs.based_on
+                && used_char.insert(b.clone())
+            {
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    (used_para, used_char)
+}
+
+fn unused_style_names(d: &designcraft_doc::Document, do_para: bool, do_char: bool) -> (Vec<String>, Vec<String>) {
+    let (used_para, used_char) = used_styles(d);
+    let unused_para = if do_para {
+        d.styles.paragraph.iter().filter(|s| !s.name.starts_with('[') && !used_para.contains(&s.name)).map(|s| s.name.clone()).collect()
+    } else {
+        Vec::new()
+    };
+    let unused_char = if do_char {
+        d.styles.character.iter().filter(|s| !s.name.starts_with('[') && !used_char.contains(&s.name)).map(|s| s.name.clone()).collect()
+    } else {
+        Vec::new()
+    };
+    (unused_para, unused_char)
+}
+
+fn parse_unused_kind(p: &Value, cmd_name: &str) -> Result<(bool, bool)> {
+    match str_param(p, "kind").unwrap_or("all") {
+        "paragraph" => Ok((true, false)),
+        "character" => Ok((false, true)),
+        "all" => Ok((true, true)),
+        k => Err(bad(cmd_name, format!("unknown kind `{k}`"))),
+    }
+}
+
+fn list_unused(s: &mut Session, p: &Value) -> Result<Value> {
+    let (do_para, do_char) = parse_unused_kind(p, "style.unused")?;
+    let st = s.doc()?;
+    let (unused_para, unused_char) = unused_style_names(&st.doc, do_para, do_char);
+    Ok(json!({
+        "paragraph": unused_para,
+        "character": unused_char,
+    }))
+}
+
+fn delete_unused(s: &mut Session, p: &Value) -> Result<Value> {
+    let (do_para, do_char) = parse_unused_kind(p, "style.deleteUnused")?;
+    let (unused_para, unused_char) = unused_style_names(&s.doc()?.doc, do_para, do_char);
+    let total = unused_para.len() + unused_char.len();
+    if total == 0 {
+        return Ok(json!({
+            "paragraph": [],
+            "character": [],
+            "deleted": 0,
+        }));
+    }
+    s.edit(|d, _| {
+        let para_set: std::collections::HashSet<&str> = unused_para.iter().map(String::as_str).collect();
+        let char_set: std::collections::HashSet<&str> = unused_char.iter().map(String::as_str).collect();
+        let st = d.styles_mut();
+        if !para_set.is_empty() {
+            st.paragraph.retain(|x| !para_set.contains(x.name.as_str()));
+            for name in &unused_para {
+                st.export_tags.remove(&format!("p:{name}"));
+            }
+            for s in &mut st.paragraph {
+                if s.based_on.as_deref().is_some_and(|b| para_set.contains(b)) {
+                    s.based_on = None;
+                }
+                if s.next_style.as_deref().is_some_and(|n| para_set.contains(n)) {
+                    s.next_style = None;
+                }
+            }
+            for o in &mut st.object {
+                if o.paragraph_style.as_deref().is_some_and(|ps| para_set.contains(ps)) {
+                    o.paragraph_style = Some(designcraft_doc::BASIC_PARAGRAPH.to_string());
+                }
+            }
+            for c in &mut st.cell {
+                if c.paragraph_style.as_deref().is_some_and(|ps| para_set.contains(ps)) {
+                    c.paragraph_style = Some(designcraft_doc::BASIC_PARAGRAPH.to_string());
+                }
+            }
+        }
+        if !char_set.is_empty() {
+            st.character.retain(|x| !char_set.contains(x.name.as_str()));
+            for name in &unused_char {
+                st.export_tags.remove(&format!("c:{name}"));
+            }
+            for s in &mut st.character {
+                if s.based_on.as_deref().is_some_and(|b| char_set.contains(b)) {
+                    s.based_on = None;
+                }
+            }
+        }
+        Ok(json!({
+            "paragraph": unused_para,
+            "character": unused_char,
+            "deleted": total,
+        }))
     })
 }
 
@@ -1693,5 +2086,115 @@ mod style_load_tests {
         s_text.execute("text.select", &json!({"story": sid2, "anchor": 0, "focus": 0})).unwrap();
         s_text.execute("edit.paste", &json!({"text": "Formatted"})).unwrap();
         assert!(s_text.doc().unwrap().doc.styles.char_style("SpecialHighlight").is_some());
+    }
+
+    #[test]
+    fn delete_unused_styles_preserves_direct_and_transitive_refs_and_is_undoable() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({})).unwrap();
+
+        // Create paragraph styles:
+        // - BasePara -> used transitively via basedOn
+        // - NextPara -> used transitively via nextStyle
+        // - BodyPara -> applied directly to text (basedOn: BasePara, nextStyle: NextPara, bullet_char_style: BulletChar)
+        // - TableCellPara -> used inside a table cell
+        // - UnusedPara1, UnusedPara2 -> unused (UnusedPara2 basedOn UnusedPara1)
+        s.execute("style.character.create", &json!({"name": "BaseChar"})).unwrap();
+        s.execute("style.character.create", &json!({"name": "AppliedChar", "basedOn": "BaseChar"})).unwrap();
+        s.execute("style.character.create", &json!({"name": "BulletChar"})).unwrap();
+        s.execute("style.character.create", &json!({"name": "UnusedChar"})).unwrap();
+
+        s.execute("style.paragraph.create", &json!({"name": "BasePara"})).unwrap();
+        s.execute("style.paragraph.create", &json!({"name": "NextPara"})).unwrap();
+        s.execute(
+            "style.paragraph.create",
+            &json!({
+                "name": "BodyPara",
+                "basedOn": "BasePara",
+                "nextStyle": "NextPara",
+                "para": {"bulletCharStyle": "BulletChar"}
+            }),
+        )
+        .unwrap();
+        s.execute("style.paragraph.create", &json!({"name": "TableCellPara"})).unwrap();
+        s.execute("style.paragraph.create", &json!({"name": "UnusedPara1"})).unwrap();
+        s.execute("style.paragraph.create", &json!({"name": "UnusedPara2", "basedOn": "UnusedPara1"})).unwrap();
+
+        let f = s.execute("frame.create", &json!({"rect": [10, 10, 300, 200], "content": "text", "text": "Hello world"})).unwrap();
+        let sid = f["story"].as_u64().unwrap();
+        s.execute("text.select", &json!({"story": sid, "anchor": 0, "focus": 5})).unwrap();
+        s.execute("style.paragraph.apply", &json!({"name": "BodyPara"})).unwrap();
+        s.execute("style.character.apply", &json!({"name": "AppliedChar"})).unwrap();
+
+        // Put a table in another story and apply TableCellPara in a cell
+        let f2 = s.execute("frame.create", &json!({"rect": [10, 220, 300, 200], "content": "text", "text": ""})).unwrap();
+        let sid2 = f2["story"].as_u64().unwrap();
+        s.execute("text.select", &json!({"story": sid2, "anchor": 0, "focus": 0})).unwrap();
+        s.execute("table.insert", &json!({"rows": 1, "columns": 1})).unwrap();
+        s.execute("style.paragraph.apply", &json!({"name": "TableCellPara"})).unwrap();
+
+        // Query unused
+        let unused = s.execute("style.unused", &json!({})).unwrap();
+        assert_eq!(unused["paragraph"], json!(["UnusedPara1", "UnusedPara2"]));
+        assert_eq!(unused["character"], json!(["UnusedChar"]));
+
+        // Delete only unused character styles first
+        let del_char = s.execute("style.deleteUnused", &json!({"kind": "character"})).unwrap();
+        assert_eq!(del_char["deleted"], 1);
+        assert_eq!(del_char["character"], json!(["UnusedChar"]));
+        assert!(s.doc().unwrap().doc.styles.char_style("UnusedChar").is_none());
+        assert!(s.doc().unwrap().doc.styles.para("UnusedPara1").is_some());
+
+        // Delete remaining unused (paragraph)
+        let del_para = s.execute("style.deleteUnused", &json!({"kind": "paragraph"})).unwrap();
+        assert_eq!(del_para["deleted"], 2);
+        assert_eq!(del_para["paragraph"], json!(["UnusedPara1", "UnusedPara2"]));
+
+        // Verify used + built-in + transitive styles are intact
+        let st = &s.doc().unwrap().doc.styles;
+        assert!(st.para(designcraft_doc::NO_PARA_STYLE).is_some());
+        assert!(st.para(designcraft_doc::BASIC_PARAGRAPH).is_some());
+        assert!(st.para("BodyPara").is_some());
+        assert!(st.para("BasePara").is_some());
+        assert!(st.para("NextPara").is_some());
+        assert!(st.para("TableCellPara").is_some());
+        assert!(st.para("UnusedPara1").is_none());
+        assert!(st.para("UnusedPara2").is_none());
+
+        assert!(st.char_style(designcraft_doc::NO_CHAR_STYLE).is_some());
+        assert!(st.char_style("AppliedChar").is_some());
+        assert!(st.char_style("BaseChar").is_some());
+        assert!(st.char_style("BulletChar").is_some());
+
+        // Calling again when nothing is unused is a clean 0-count no-op
+        let noop = s.execute("style.deleteUnused", &json!({})).unwrap();
+        assert_eq!(noop["deleted"], 0);
+
+        // Undo restores UnusedPara1 and UnusedPara2
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert!(s.doc().unwrap().doc.styles.para("UnusedPara1").is_some());
+        assert!(s.doc().unwrap().doc.styles.para("UnusedPara2").is_some());
+
+        // Editor mode forbids deleting styles
+        s.restrict_to_editor();
+        assert!(s.execute("style.deleteUnused", &json!({})).is_err());
+        assert!(s.execute("style.character.delete", &json!({"name": "AppliedChar"})).is_err());
+    }
+
+    #[test]
+    fn delete_character_style_replaces_references() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({})).unwrap();
+        s.execute("style.character.create", &json!({"name": "Accent"})).unwrap();
+        let f = s.execute("frame.create", &json!({"rect": [10, 10, 200, 100], "content": "text", "text": "Accent"})).unwrap();
+        let sid = f["story"].as_u64().unwrap();
+        s.execute("text.select", &json!({"story": sid, "anchor": 0, "focus": 6})).unwrap();
+        s.execute("style.character.apply", &json!({"name": "Accent"})).unwrap();
+
+        assert!(s.execute("style.character.delete", &json!({"name": "[None]"})).is_err());
+        s.execute("style.character.delete", &json!({"name": "Accent"})).unwrap();
+        assert!(s.doc().unwrap().doc.styles.char_style("Accent").is_none());
+        let story = s.doc().unwrap().doc.story(designcraft_doc::StoryId(sid)).unwrap();
+        assert!(story.chars.iter().all(|c| c.format.style == designcraft_doc::NO_CHAR_STYLE));
     }
 }

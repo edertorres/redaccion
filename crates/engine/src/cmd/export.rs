@@ -9,7 +9,7 @@ use crate::{EngineError, Result, Session};
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(noundo "file.exportPdf", "Export PDF…", ["File"], None,
-        "{path?, pages?: \"1-3,5\" | [1,3] (1-based positions; default all), flatten?: high|medium|low|ppi (Transparency Flattener: spreads with transparency are rasterised), spreads?: bool, fullScreen?: bool, bookmarksPanel?: bool, pageLayout?: single|continuous|twoUp|twoUpCover|twoUpContinuous, view?: fitPage|fitWidth|actual, advanceSeconds?: number (interactive PDF), bleed?: bool (document bleed), marks?: bool | {crop?, bleed?, pageInfo?, weight?, offset?}, standard?: \"none\"|\"x4\"|\"a2b\", compressImages?: bool, tagged?: bool (structure tree: stories as paragraphs, figures with alt text), media?: bool (interactive: embed placed video and sound), title?, author?} → {path, bytes, pages, warnings} (no path: {base64, …})",
+        "{path?, pages?: \"1-3,5\" | [1,3] (1-based positions; default all), flatten?: high|medium|low|ppi (Transparency Flattener: spreads with transparency are rasterised), spreads?: bool, fullScreen?: bool, bookmarksPanel?: bool, pageLayout?: single|continuous|twoUp|twoUpCover|twoUpContinuous, view?: fitPage|fitWidth|actual, advanceSeconds?: number (interactive PDF), bleed?: bool (document bleed), marks?: bool | {crop?, bleed?, pageInfo?, weight?, offset?}, standard?: \"none\"|\"x4\"|\"a2b\", compressImages?: bool, tagged?: bool (structure tree: stories as paragraphs, figures with alt text), media?: bool (interactive: embed placed video and sound), title?, author?, requireRetouched?: bool} → {path, bytes, pages, warnings} (no path: {base64, …})",
         has_doc, export_pdf),
         cmd!(noundo "file.exportEpub", "Export EPUB (Reflowable)…", ["File"], None,
         "{path?, title?, author?, language?: \"en\", cover?: bool (the first page as the cover image), fixedLayout?: bool (pre-paginated: each page as an image with its text)} → {path, bytes} (no path: {base64, bytes})",
@@ -495,6 +495,26 @@ fn first_page_ref(pdf: &[u8]) -> Option<usize> {
 }
 
 fn export_pdf(s: &mut Session, p: &Value) -> Result<Value> {
+    if p.get("requireRetouched").and_then(Value::as_bool).unwrap_or(false) {
+        let issues = super::preflight::check(s, 150.0);
+        let unretouched: Vec<_> = issues.iter().filter(|i| i.kind == "rgbPhotoUnretouched").collect();
+        if !unretouched.is_empty() {
+            let count = unretouched.len();
+            let mut msg = format!(
+                "{} unretouched photo{} block{} PDF export for press:\n",
+                count,
+                if count == 1 { "" } else { "s" },
+                if count == 1 { "s" } else { "" }
+            );
+            for issue in &unretouched {
+                let name = issue.message.split(':').next().unwrap_or(&issue.message);
+                let page_str = issue.page.map(|p| format!(" (page {})", p + 1)).unwrap_or_default();
+                msg.push_str(&format!("  - {name}{page_str}\n"));
+            }
+            msg.push_str("Apply Object > Image > Rotary Retouch (AIE) before exporting.");
+            return Err(bad("file.exportPdf", msg));
+        }
+    }
     let st = s.doc()?;
     let opts = options(p, st.doc.page_count())?;
     // Transparency Flattener presets: High / Medium / Low Resolution, or a ppi.
@@ -925,5 +945,41 @@ mod print_group_tests {
         s.execute("edit.transparencyBlendSpace", &json!({"space": "rgb"})).unwrap();
         let t = text(&mut s);
         assert!(t.contains("/CS/DeviceRGB") && designcraft_pdf::has_rgb_groups(t.as_bytes()));
+    }
+
+    #[test]
+    fn require_retouched_blocks_unretouched_photos() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({"intent": "print"})).unwrap();
+
+        let img = designcraft_images::image::RgbaImage::new(20, 20);
+        let png = designcraft_images::encode_png(&img).unwrap();
+        let placed = s
+            .execute(
+                "file.place",
+                &json!({
+                    "base64": base64_encode(&png),
+                    "name": "foto_noticia.png",
+                    "x": 50,
+                    "y": 50,
+                    "width": 100,
+                }),
+            )
+            .unwrap();
+        let item_id = placed["id"].as_u64().unwrap();
+
+        // Without requireRetouched (or false): export succeeds
+        assert!(s.execute("file.exportPdf", &json!({})).is_ok());
+        assert!(s.execute("file.exportPdf", &json!({"requireRetouched": false})).is_ok());
+
+        // With requireRetouched: true, it must fail reporting the file
+        let err = s.execute("file.exportPdf", &json!({"requireRetouched": true})).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("foto_noticia.png"), "error should name the offending asset: {msg}");
+        assert!(msg.contains("Rotary Retouch"), "error should advise retouching: {msg}");
+
+        // After rotary retouch (AIE) converting to CMYK TIFF: export succeeds even with requireRetouched
+        s.execute("image.retouchRotary", &json!({"ids": [item_id], "preset": "coldset", "format": "cmyk"})).unwrap();
+        assert!(s.execute("file.exportPdf", &json!({"requireRetouched": true})).is_ok());
     }
 }

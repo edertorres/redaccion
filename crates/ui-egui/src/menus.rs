@@ -18,6 +18,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("app.saveSwatches", "Save Swatches for Exchange…", None, "{path?} — write the colour swatches as .ase"),
     ("app.toggleEditorMode", "Toggle Editor Mode", None, "{} — switch to copyfitting/editorial mode"),
     ("app.editorialOverview", "Editorial Overview…", Some("Cmd+Shift+O"), "{} — whole-edition flatplan and approval status"),
+    ("app.versionHistory", "Version History…", Some("Cmd+Alt+H"), "{} — view and restore snapshots and edition backups"),
     ("app.exportIcml", "Export ICML…", None, "{path?} — InCopy Markup Language (ICML) export for shared stories"),
     ("app.exportPng", "Export Page as PNG…", Some("Cmd+E"), "{}"),
     ("app.exportIdml", "Export IDML…", None, "{path?} — InDesign Markup (IDML) package"),
@@ -180,6 +181,7 @@ pub const MENUS: &[(&str, &[&str])] = &[
             "ui:app.saveDialog",
             "ui:app.saveCopyDialog",
             "cmd:file.revert",
+            "ui:app.versionHistory",
             "-",
             "ui:app.placeDialog",
             "ui:app.placeWithOptions",
@@ -742,6 +744,10 @@ pub fn run_ui(app: &mut DesignApp, id: &str, p: &Value) -> Option<Result<Value, 
         }
         "app.editorialOverview" => {
             app.ui.dialog = Some(crate::dialogs::Dialog::new("editorialOverview", json!({})));
+            Ok(Value::Null)
+        }
+        "app.versionHistory" => {
+            app.ui.dialog = Some(crate::dialogs::Dialog::new("versionHistory", json!({})));
             Ok(Value::Null)
         }
         "app.openDialog" => app.pick_and_open("open"),

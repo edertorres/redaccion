@@ -513,6 +513,59 @@ fn serve_concurrency_lease_and_heartbeat() {
     let b_acq = parse_http_json(&resp);
     assert_eq!(b_acq["status"], "acquired");
 
+    // 9. Verify backup management endpoints: list, checkpoint, restore
+    let mut stream = TcpStream::connect(format!("127.0.0.1:{port}")).unwrap();
+    stream.write_all(b"GET /api/documents/articulo_uno/backups HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let mut resp = String::new();
+    stream.read_to_string(&mut resp).unwrap();
+    assert!(resp.contains("200 OK"));
+    let b_list = parse_http_json(&resp);
+    let arr = b_list.as_array().expect("backups list should be array");
+    assert!(!arr.is_empty(), "expected at least one backup");
+    let target_filename = arr[0]["filename"].as_str().unwrap().to_string();
+
+    // Checkpoint
+    let cp_body = serde_json::json!({"label": "edicion_cierre"}).to_string();
+    let mut stream = TcpStream::connect(format!("127.0.0.1:{port}")).unwrap();
+    let post_cp = format!(
+        "POST /api/documents/articulo_uno/backups/checkpoint HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+        cp_body.len(),
+        cp_body
+    );
+    stream.write_all(post_cp.as_bytes()).unwrap();
+    let mut resp = String::new();
+    stream.read_to_string(&mut resp).unwrap();
+    assert!(resp.contains("200 OK"));
+    let cp_res = parse_http_json(&resp);
+    assert_eq!(cp_res["checkpoint"], true);
+
+    // Restore to V1
+    let rest_body = serde_json::json!({"filename": target_filename}).to_string();
+    let mut stream = TcpStream::connect(format!("127.0.0.1:{port}")).unwrap();
+    let post_rst = format!(
+        "POST /api/documents/articulo_uno/backups/restore HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+        rest_body.len(),
+        rest_body
+    );
+    stream.write_all(post_rst.as_bytes()).unwrap();
+    let mut resp = String::new();
+    stream.read_to_string(&mut resp).unwrap();
+    assert!(resp.contains("200 OK"));
+    let rst_res = parse_http_json(&resp);
+    assert_eq!(rst_res["restored"], true);
+
+    // Document file on disk should now be restored to V1
+    let doc_file = d_dir.join("articulo_uno.designcraft");
+    let restored_bytes = std::fs::read(&doc_file).unwrap();
+    assert_eq!(restored_bytes, v1_bytes);
+
+    // Prune
+    let mut stream = TcpStream::connect(format!("127.0.0.1:{port}")).unwrap();
+    stream.write_all(b"POST /api/documents/articulo_uno/backups/prune HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n").unwrap();
+    let mut resp = String::new();
+    stream.read_to_string(&mut resp).unwrap();
+    assert!(resp.contains("200 OK"));
+
     let _ = child.kill();
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&dir);

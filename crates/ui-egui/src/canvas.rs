@@ -799,6 +799,32 @@ fn draw_item_edges(app: &DesignApp, painter: &egui::Painter, xf: &Xf, doc: &Docu
         painter.line_segment([p(r.x0, r.y0), p(r.x1, r.y1)], Stroke::new(hair(painter), col.gamma_multiply(0.75)));
         painter.line_segment([p(r.x1, r.y0), p(r.x0, r.y1)], Stroke::new(hair(painter), col.gamma_multiply(0.75)));
     }
+    // ⚠ AIE badge: warn when a raster photo has not been through Rotary Retouch
+    // in a print document. The badge is a small orange pill at the bottom-right
+    // corner of the frame. It disappears as soon as the asset becomes a CMYK TIFF.
+    if doc.settings.intent == designcraft_doc::Intent::Print
+        && let Content::Graphic(g) = &it.content
+        && let Some(asset) = doc.assets.get(&g.asset)
+    {
+        let is_vector = designcraft_images::is_pdf(&asset.data) || designcraft_images::is_svg(&asset.data);
+        let needs_retouch = asset.pixels.is_some() && !is_vector && !designcraft_images::is_cmyk_tiff(&asset.data);
+        if needs_retouch {
+            let r = it.inner_bounds();
+            let m = a * it.xf;
+            // Bottom-right corner in screen space, inset 2 px from the edge.
+            let corner = xf.to_screen(m * Point::new(r.x1, r.y1));
+            let badge_text = "⚠ AIE";
+            let font = egui::FontId::proportional(9.5);
+            let galley = painter.layout_no_wrap(badge_text.to_string(), font, Color32::WHITE);
+            let pad = egui::vec2(3.5, 2.0);
+            let badge_size = galley.size() + pad * 2.0;
+            // Place the badge so its bottom-right aligns with the frame corner.
+            let badge_rect = Rect::from_min_size(egui::pos2(corner.x - badge_size.x - 2.0, corner.y - badge_size.y - 2.0), badge_size);
+            let badge_color = Color32::from_rgba_unmultiplied(220, 110, 20, 220);
+            painter.rect_filled(badge_rect, 3.0, badge_color);
+            painter.galley(badge_rect.min + pad, galley, Color32::WHITE);
+        }
+    }
 }
 
 fn layer_color(doc: &Document, it: &Item) -> Color32 {

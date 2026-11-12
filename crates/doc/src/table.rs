@@ -867,6 +867,30 @@ impl crate::Document {
 }
 
 impl Story {
+    /// Visit this story and every text inside it (table cells, footnotes, endnotes), immutably.
+    pub fn for_each_text(&self, f: &mut impl FnMut(&Story)) {
+        self.for_each_text_depth(f, 0);
+    }
+
+    fn for_each_text_depth(&self, f: &mut impl FnMut(&Story), depth: usize) {
+        const MAX_DEPTH: usize = 16;
+        f(self);
+        if depth >= MAX_DEPTH {
+            return;
+        }
+        for t in self.tables.values() {
+            for c in &t.cells {
+                c.text.for_each_text_depth(f, depth + 1);
+            }
+        }
+        for n in &self.notes {
+            n.text.for_each_text_depth(f, depth + 1);
+        }
+        for n in &self.endnotes {
+            n.text.for_each_text_depth(f, depth + 1);
+        }
+    }
+
     /// Visit this story and every text inside it (table cells, footnotes), mutably.
     pub fn for_each_text_mut(&mut self, f: &mut impl FnMut(&mut Story)) {
         f(self);

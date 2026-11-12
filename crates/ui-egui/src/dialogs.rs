@@ -40,6 +40,7 @@ impl Dialog {
             "saveCopy" => json!({"name": "Untitled copy", "format": "designcraft", "target": "server"}),
             "oversetWarning" => json!({"stories": []}),
             "editorialOverview" => json!({"filter": "all"}),
+            "versionHistory" => json!({"newLabel": "cierre_edicion"}),
             _ => json!({}),
         };
         if let Value::Object(d) = defaults {
@@ -637,9 +638,25 @@ fn editorial_overview_dialog(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dia
     let cur_filter = d.s("filter");
     let active_filter = if cur_filter.is_empty() { "all" } else { &cur_filter };
 
+    let is_dirty = overview_data["isDirty"].as_bool().unwrap_or(false);
+    let doc_title = overview_data["docTitle"].as_str().unwrap_or("Edición del Periódico");
+    let last_saved_ts = overview_data["lastSaved"].as_i64();
+
+    let mut action_save_milestone = false;
+    let mut action_open_history = false;
+
     // --- Header Summary Bar ---
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("📰 Edición del Periódico").strong().size(15.0));
+        ui.label(egui::RichText::new(format!("📰 {doc_title}")).strong().size(15.0));
+        ui.separator();
+        if is_dirty {
+            ui.colored_label(egui::Color32::from_rgb(230, 140, 30), "🟠 Cambios sin guardar");
+        } else if let Some(ts) = last_saved_ts {
+            let dt = designcraft_doc::vars::format_date(ts, "HH:mm");
+            ui.colored_label(egui::Color32::from_rgb(46, 160, 67), format!("🟢 Al día ({dt})"));
+        } else {
+            ui.colored_label(egui::Color32::from_rgb(46, 160, 67), "🟢 Al día");
+        }
         ui.separator();
         ui.label(format!("Total Páginas: {page_count}"));
         ui.separator();
@@ -653,6 +670,21 @@ fn editorial_overview_dialog(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dia
             ui.separator();
             ui.colored_label(egui::Color32::from_rgb(248, 81, 73), format!("🔴 Con Overset: {overset_count}"));
         }
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let save_btn = egui::Button::new(egui::RichText::new("💾 Guardar Todo / Hito").size(11.5).strong().color(egui::Color32::WHITE))
+                .fill(egui::Color32::from_rgb(35, 120, 54));
+            if ui.add(save_btn).on_hover_text("Guarda la maqueta y crea un hito de cierre en .backups/").clicked() {
+                action_save_milestone = true;
+            }
+            if ui
+                .button(egui::RichText::new("🕒 Historial de Versiones").size(11.5))
+                .on_hover_text("Examinar todas las instantáneas y respaldos del día")
+                .clicked()
+            {
+                action_open_history = true;
+            }
+        });
     });
 
     ui.add_space(8.0);
@@ -799,6 +831,14 @@ fn editorial_overview_dialog(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dia
                                 jump_to_page = Some(p_idx);
                             }
 
+                            if ui
+                                .button(egui::RichText::new("🕒 Versiones").size(11.0))
+                                .on_hover_text("Ver respaldos e historial de versiones")
+                                .clicked()
+                            {
+                                action_open_history = true;
+                            }
+
                             if !app.session.editor_mode {
                                 if is_approved {
                                     if ui.button(egui::RichText::new("🔓 Reabrir").size(11.0)).clicked() {
@@ -821,6 +861,16 @@ fn editorial_overview_dialog(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dia
         });
     });
 
+    if action_save_milestone {
+        let _ = app.run("app.save", json!({}));
+        let _ = app.run("file.backup.create", json!({"label": "cierre_edicion"}));
+        app.status("Edición guardada e hito de cierre creado con éxito en .backups/");
+    }
+    if action_open_history {
+        app.ui.dialog = Some(crate::dialogs::Dialog::new("versionHistory", json!({})));
+        return;
+    }
+
     if let Some((p_idx, approve)) = action_toggle_approve {
         let _ = app.run("page.editorial.approve", json!({"page": p_idx, "approved": approve, "by": "Editor Jefe"}));
     }
@@ -830,6 +880,176 @@ fn editorial_overview_dialog(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dia
     if let Some(p_idx) = jump_to_page {
         crate::canvas::go_to_page(app, p_idx);
         app.ui.dialog = None;
+    }
+}
+
+fn version_history_dialog(app: &mut DesignApp, ui: &mut egui::Ui, d: &mut Dialog) {
+    let backups_val = app.session.execute("file.backup.list", &json!({})).unwrap_or(Value::Array(Vec::new()));
+    let backups = backups_val.as_array().cloned().unwrap_or_default();
+
+    let doc_title = app.session.active().map(|st| st.title()).unwrap_or_else(|| "Documento".into());
+    let is_dirty = app.session.active().is_some_and(|st| st.is_dirty());
+    let last_saved_ts = app.session.active().and_then(|st| st.last_saved);
+
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(format!("📄 {doc_title}")).strong().size(15.0));
+        ui.separator();
+        if is_dirty {
+            ui.colored_label(egui::Color32::from_rgb(230, 140, 30), "🟠 Modificaciones en curso (sin guardar)");
+        } else if let Some(ts) = last_saved_ts {
+            let dt = designcraft_doc::vars::format_date(ts, "yyyy-MM-dd HH:mm:ss");
+            ui.colored_label(egui::Color32::from_rgb(46, 160, 67), format!("🟢 Al día (guardado: {dt})"));
+        } else {
+            ui.colored_label(egui::Color32::from_rgb(46, 160, 67), "🟢 Al día");
+        }
+    });
+
+    ui.add_space(8.0);
+    ui.separator();
+    ui.add_space(6.0);
+
+    // --- Actions Bar: Create Milestone / Prune ---
+    let mut action_create_label: Option<String> = None;
+    let mut action_prune = false;
+    let mut action_restore_file: Option<String> = None;
+
+    ui.horizontal(|ui| {
+        crate::rtl::label(ui, "Etiqueta del Hito:");
+        let mut cur_label = d.s("newLabel");
+        if cur_label.is_empty() {
+            cur_label = "cierre_edicion".to_string();
+        }
+        if ui.text_edit_singleline(&mut cur_label).changed() {
+            d.fields.insert("newLabel".into(), json!(cur_label));
+        }
+
+        if ui.button("🏷 Guardar Hito de Edición").on_hover_text("Crea una instantánea nombrada permanente").clicked() {
+            action_create_label = Some(cur_label);
+        }
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .button("🧹 Purgar Versiones Redundantes")
+                .on_hover_text("Elimina respaldos automáticos intermedios para liberar espacio en disco según la política de retención")
+                .clicked()
+            {
+                action_prune = true;
+            }
+        });
+    });
+
+    ui.add_space(8.0);
+    ui.separator();
+    ui.add_space(6.0);
+
+    // --- Backups List ---
+    let total_size: u64 = backups.iter().filter_map(|b| b["size"].as_u64()).sum();
+    let total_size_mb = (total_size as f64) / (1024.0 * 1024.0);
+
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(format!("Instantáneas disponibles ({}):", backups.len())).strong());
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(egui::RichText::new(format!("Espacio ocupado: {total_size_mb:.2} MB")).size(11.5).color(egui::Color32::from_gray(170)));
+        });
+    });
+    ui.add_space(4.0);
+
+    egui::ScrollArea::vertical().max_height(340.0).show(ui, |ui| {
+        if backups.is_empty() {
+            ui.vertical_centered(|ui| {
+                ui.add_space(30.0);
+                ui.label(egui::RichText::new("No hay respaldos automáticos registrados aún para este documento.").italics());
+                ui.label("Los respaldos se generan automáticamente al guardar o trabajar en el diario.");
+                ui.add_space(30.0);
+            });
+            return;
+        }
+
+        for b in &backups {
+            let filename = b["filename"].as_str().unwrap_or("");
+            let fdate = b["formattedDate"].as_str().unwrap_or("");
+            let ftime = b["formattedTime"].as_str().unwrap_or("");
+            let label = b["label"].as_str().unwrap_or("Autoguardado");
+            let size = b["size"].as_u64().unwrap_or(0);
+            let size_kb = (size as f64) / 1024.0;
+            let size_str = if size_kb > 1024.0 { format!("{:.1} MB", size_kb / 1024.0) } else { format!("{size_kb:.0} KB") };
+            let is_milestone = b["isMilestone"].as_bool().unwrap_or(false);
+            let is_safety = filename.contains("pre_restore");
+
+            let border_color = if is_milestone {
+                egui::Color32::from_rgb(56, 139, 253)
+            } else if is_safety {
+                egui::Color32::from_rgb(210, 153, 34)
+            } else {
+                egui::Color32::from_gray(70)
+            };
+
+            egui::Frame::NONE
+                .fill(egui::Color32::from_rgba_premultiplied(30, 30, 36, 220))
+                .corner_radius(4.0)
+                .stroke(egui::Stroke::new(1.0, border_color))
+                .inner_margin(egui::Margin { left: 10, right: 10, top: 6, bottom: 6 })
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        // Badge
+                        if is_milestone {
+                            ui.colored_label(egui::Color32::from_rgb(56, 139, 253), egui::RichText::new("🏷 HITO").strong().size(11.0));
+                        } else if is_safety {
+                            ui.colored_label(egui::Color32::from_rgb(210, 153, 34), egui::RichText::new("🛡 SEGURIDAD").strong().size(11.0));
+                        } else {
+                            ui.colored_label(egui::Color32::from_gray(160), egui::RichText::new("🕒 AUTO").size(11.0));
+                        }
+
+                        ui.add_space(4.0);
+                        ui.label(egui::RichText::new(format!("{fdate} {ftime}")).strong());
+                        ui.label(egui::RichText::new(format!("({label})")).color(egui::Color32::from_gray(180)));
+                        ui.label(egui::RichText::new(size_str).size(11.0).color(egui::Color32::from_gray(150)));
+
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let fname_clone = filename.to_string();
+                            let rst_btn = egui::Button::new(egui::RichText::new("⮌ Restaurar").size(11.5).strong().color(egui::Color32::WHITE))
+                                .fill(egui::Color32::from_rgb(46, 120, 60));
+                            if ui
+                                .add(rst_btn)
+                                .on_hover_text("Restaura este documento a esta versión previa (se creará una copia de seguridad del estado actual)")
+                                .clicked()
+                            {
+                                action_restore_file = Some(fname_clone);
+                            }
+                        });
+                    });
+                });
+            ui.add_space(4.0);
+        }
+    });
+
+    if let Some(lbl) = action_create_label {
+        let _ = app.run("file.backup.create", json!({"label": lbl}));
+        app.status("Instantánea de hito creada correctamente en .backups/");
+    }
+    if let Some(rf) = action_restore_file {
+        match app.run("file.backup.restore", json!({"filename": rf})) {
+            Ok(_) => {
+                app.status("Documento restaurado con éxito a la versión seleccionada.");
+                app.ui.dialog = None;
+            }
+            Err(e) => {
+                app.status(format!("Error al restaurar: {e}"));
+            }
+        }
+    }
+    if action_prune {
+        match app.run("file.backup.prune", json!({})) {
+            Ok(v) => {
+                let del = v["deletedCount"].as_u64().unwrap_or(0);
+                let freed = v["freedBytes"].as_u64().unwrap_or(0);
+                let freed_mb = (freed as f64) / (1024.0 * 1024.0);
+                app.status(format!("Se purgaron {del} versiones intermedias ({freed_mb:.1} MB liberados)."));
+            }
+            Err(e) => {
+                app.status(format!("Error al purgar respaldos: {e}"));
+            }
+        }
     }
 }
 
@@ -1394,13 +1614,14 @@ pub fn show(app: &mut DesignApp, ctx: &egui::Context) {
         "exportPng" => crate::i18n::tr(&app.ui.language, "Export PNG"),
         "oversetWarning" => crate::i18n::tr(&app.ui.language, "Preflight Warning: Overset Text"),
         "editorialOverview" => crate::i18n::tr(&app.ui.language, "Panorama de Edición — Flatplan"),
+        "versionHistory" => crate::i18n::tr(&app.ui.language, "Historial de Versiones y Respaldos"),
         id => match id.strip_prefix("cmd:").and_then(designcraft_engine::find_command) {
             Some(c) => crate::i18n::tr(&app.ui.language, c.label.trim_end_matches('…')),
             None => crate::i18n::tr(&app.ui.language, "Dialog"),
         },
     };
     let is_style_dialog = d.id == "paragraphStyleOptions" || d.id == "characterStyleOptions";
-    let is_overview = d.id == "editorialOverview";
+    let is_overview = d.id == "editorialOverview" || d.id == "versionHistory";
     egui::Modal::new(egui::Id::new("dialog")).show(ctx, |ui| {
         let max_w: f32 = (ctx.input(|i| i.raw.screen_rect.map(|r| r.width()).unwrap_or(1200.0)) - 32.0).max(300.0);
         ui.set_min_width(if is_overview { 940.0_f32.min(max_w) } else if is_style_dialog { 760.0_f32.min(max_w) } else { 380.0_f32.min(max_w) });
@@ -1645,6 +1866,7 @@ pub fn show(app: &mut DesignApp, ctx: &egui::Context) {
             "saveCopy" => save_copy_dialog(app, ui, &mut d),
             "oversetWarning" => overset_warning_dialog(app, ui, &mut d),
             "editorialOverview" => editorial_overview_dialog(app, ui, &mut d),
+            "versionHistory" => version_history_dialog(app, ui, &mut d),
             "pdfImport" => {
                 ui.label(egui::RichText::new(d.s("path")).size(11.0));
                 ui.horizontal(|ui| {
@@ -1999,7 +2221,7 @@ pub fn show(app: &mut DesignApp, ctx: &egui::Context) {
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let is_warning = d.id == "oversetWarning";
-                let is_overview = d.id == "editorialOverview";
+                let is_overview = d.id == "editorialOverview" || d.id == "versionHistory";
                 let ok_text = if is_warning {
                     "Exportar de todos modos"
                 } else if is_overview {
@@ -2292,6 +2514,7 @@ fn confirm_inner(app: &mut DesignApp) -> Result<Value, String> {
 
         }
         "editorialOverview" => Ok(Value::Null),
+        "versionHistory" => Ok(Value::Null),
         "exportPng" => {
             let page = d.n("page").unwrap_or(1.0).max(1.0) as usize - 1;
             let scale = d.n("scale").unwrap_or(2.0);
@@ -5845,5 +6068,31 @@ mod tests {
         );
         output2.textures_delta.clear();
         assert!(app.ui.dialog.is_some());
+    }
+
+    #[test]
+    fn version_history_dialog_renders_and_executes_actions() {
+        let dir = std::env::temp_dir().join(format!("dc-vh-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let doc_file = dir.join("test_doc.designcraft");
+
+        let mut app = crate::DesignApp::new(designcraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({"pages": 1})).unwrap();
+        app.run("file.save", json!({"path": doc_file.to_string_lossy()})).unwrap();
+        app.run("file.backup.create", json!({"label": "cierre_test"})).unwrap();
+
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx, "");
+        app.ui.dialog = Some(Dialog::new("versionHistory", json!({})));
+
+        let mut output = ctx.run_ui(
+            egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 900.0))), ..Default::default() },
+            |ui| super::show(&mut app, ui.ctx()),
+        );
+        output.textures_delta.clear();
+        assert!(app.ui.dialog.is_some());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

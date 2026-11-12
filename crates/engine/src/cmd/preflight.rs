@@ -218,6 +218,19 @@ pub fn check_with_tac(s: &Session, min_ppi: f64, max_tac: Option<f64>) -> Vec<Is
                                     });
                                 }
                             }
+                            // Warn when a raster photo in a print document has not been
+                            // through AIE retouching (i.e. it is still an RGB raster rather
+                            // than a press-separated CMYK TIFF). Vector formats (PDF/SVG)
+                            // and already-separated CMYK TIFFs are excluded.
+                            if d.settings.intent == Intent::Print && !vector && a.pixels.is_some() && !designcraft_images::is_cmyk_tiff(&a.data) {
+                                out.push(Issue {
+                                    severity: "warning",
+                                    kind: "rgbPhotoUnretouched",
+                                    message: format!("{}: RGB photo not optimised for press — apply Rotary Retouch (AIE, ISO 12647-3)", a.name),
+                                    item: Some(it.id.0),
+                                    page,
+                                });
+                            }
                         }
                     },
                     Content::Text(tf) if d.story(tf.story).is_some_and(|s| s.is_empty()) => {
@@ -390,5 +403,98 @@ mod tac_tests {
         let res_loose = s.execute("preflight.run", &json!({"maxTac": 350.0})).unwrap();
         let issues_loose = res_loose["issues"].as_array().unwrap();
         assert!(!issues_loose.iter().any(|i| i["kind"] == "inkCoverage"));
+    }
+}
+
+#[cfg(test)]
+mod retouch_audit_tests {
+    use crate::Session;
+    use crate::cmd::base64_encode;
+    use serde_json::json;
+
+    fn make_rgb_png() -> Vec<u8> {
+        let img = designcraft_images::image::RgbaImage::new(20, 20);
+        designcraft_images::encode_png(&img).unwrap()
+    }
+
+    /// A raw RGB/PNG photo placed in a print document must trigger
+    /// `rgbPhotoUnretouched`. After `image.retouchRotary` produces a CMYK TIFF,
+    /// the warning must disappear.
+    #[test]
+    fn rgb_photo_triggers_warning_and_cmyk_tiff_clears_it() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({"intent": "print"})).unwrap();
+
+        let png = make_rgb_png();
+        let placed = s
+            .execute(
+                "file.place",
+                &json!({
+                    "base64": base64_encode(&png),
+                    "name": "noticia.png",
+                    "x": 72,
+                    "y": 72,
+                    "width": 100,
+                }),
+            )
+            .unwrap();
+        let item_id = placed["id"].as_u64().unwrap();
+
+        // Before retouch: the warning must be present.
+        let res = s.execute("preflight.run", &json!({})).unwrap();
+        let issues = res["issues"].as_array().unwrap();
+        let unretouched: Vec<_> = issues.iter().filter(|i| i["kind"] == "rgbPhotoUnretouched").collect();
+        assert_eq!(unretouched.len(), 1, "expected rgbPhotoUnretouched warning before retouch: {issues:?}");
+        assert!(unretouched[0]["message"].as_str().unwrap().contains("noticia.png"));
+        assert_eq!(unretouched[0]["item"].as_u64().unwrap(), item_id);
+
+        // Apply AIE retouching (produces CMYK TIFF).
+        s.execute("image.retouchRotary", &json!({"ids": [item_id], "preset": "coldset", "format": "cmyk"})).unwrap();
+
+        // After retouch: the warning must be gone.
+        let res2 = s.execute("preflight.run", &json!({})).unwrap();
+        let issues2 = res2["issues"].as_array().unwrap();
+        assert!(!issues2.iter().any(|i| i["kind"] == "rgbPhotoUnretouched"), "rgbPhotoUnretouched should be gone after AIE retouch: {issues2:?}");
+    }
+
+    /// Vector graphics (PDF placed as logo) must not trigger the warning even
+    /// in print documents — they export as vectors, not as raster RGB.
+    #[test]
+    fn vector_pdf_does_not_trigger_rgb_warning() {
+        let mut logo_s = Session::new();
+        logo_s.execute("file.new", &json!({"width": 50, "height": 50})).unwrap();
+        let pdf = logo_s.execute("file.exportPdf", &json!({})).unwrap();
+
+        let mut s = Session::new();
+        s.execute("file.new", &json!({"intent": "print"})).unwrap();
+        s.execute("file.place", &json!({"base64": pdf["base64"], "name": "logo.pdf", "x": 0, "y": 0, "width": 100})).unwrap();
+
+        let res = s.execute("preflight.run", &json!({})).unwrap();
+        let issues = res["issues"].as_array().unwrap();
+        assert!(!issues.iter().any(|i| i["kind"] == "rgbPhotoUnretouched"), "vector PDF should not trigger rgbPhotoUnretouched: {issues:?}");
+    }
+
+    /// In a non-print (web/screen) document the warning must never appear.
+    #[test]
+    fn rgb_photo_in_web_document_has_no_warning() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({"intent": "web"})).unwrap();
+
+        let png = make_rgb_png();
+        s.execute(
+            "file.place",
+            &json!({
+                "base64": base64_encode(&png),
+                "name": "hero.png",
+                "x": 0,
+                "y": 0,
+                "width": 100,
+            }),
+        )
+        .unwrap();
+
+        let res = s.execute("preflight.run", &json!({})).unwrap();
+        let issues = res["issues"].as_array().unwrap();
+        assert!(!issues.iter().any(|i| i["kind"] == "rgbPhotoUnretouched"), "web document must not warn about RGB photos: {issues:?}");
     }
 }

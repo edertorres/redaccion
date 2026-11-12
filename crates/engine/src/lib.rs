@@ -98,6 +98,8 @@ pub struct DocState {
     pub preview_record: Option<u32>,
     /// The fonts the document brought (`doc.font_scope`), found while it is open.
     pub fonts: Option<Arc<FontScope>>,
+    /// Last save time (Unix timestamp, seconds).
+    pub last_saved: Option<i64>,
 }
 
 /// A document's font scope ([`designcraft_fonts::FontDb::load_document_fonts`]): its fonts are
@@ -118,6 +120,15 @@ impl DocState {
     pub fn new(doc: Document, path: Option<String>) -> Self {
         let active_layer = doc.default_layer();
         let doc = Arc::new(doc);
+        #[cfg(not(target_arch = "wasm32"))]
+        let last_saved = path
+            .as_ref()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64);
+        #[cfg(target_arch = "wasm32")]
+        let last_saved = None;
         DocState {
             saved_doc: doc.clone(),
             doc,
@@ -133,6 +144,7 @@ impl DocState {
             preview_stash: None,
             preview_record: None,
             fonts: None,
+            last_saved,
         }
     }
     pub fn is_dirty(&self) -> bool {

@@ -2841,17 +2841,62 @@ export function initEditorialLeaseManager() {
 
   const mode = urlParams.get('mode') || 'layout';
 
-  // Identity management
-  let redactorId = localStorage.getItem('designcraft_redactor_id');
-  if (!redactorId) {
-    redactorId = 'user-' + Math.random().toString(36).substring(2, 9);
-    localStorage.setItem('designcraft_redactor_id', redactorId);
+  // Identity management: link with Google Identity if authenticated
+  function resolveIdentity() {
+    const googleAuth = window.DesignCraftCloud?.getStoredAuth?.();
+    const gUser = googleAuth?.user;
+    let id = gUser?.email || localStorage.getItem('designcraft_redactor_id');
+    let name = gUser?.name || localStorage.getItem('designcraft_redactor_name');
+    let picture = gUser?.picture || '';
+
+    if (!id) {
+      id = 'user-' + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem('designcraft_redactor_id', id);
+    }
+    if (!name) {
+      name = 'Redactor ' + id.slice(-4).toUpperCase();
+      localStorage.setItem('designcraft_redactor_name', name);
+    }
+    return { id, name, picture, isGoogle: Boolean(gUser?.email) };
   }
 
-  let redactorName = localStorage.getItem('designcraft_redactor_name');
-  if (!redactorName) {
-    redactorName = 'Redactor ' + redactorId.slice(-4).toUpperCase();
-    localStorage.setItem('designcraft_redactor_name', redactorName);
+  let identity = resolveIdentity();
+  let redactorId = identity.id;
+  let redactorName = identity.name;
+  let redactorPicture = identity.picture;
+  let currentUserRole = localStorage.getItem('designcraft_role') || 'editor';
+
+  async function syncRole(email) {
+    if (!email) return 'editor';
+    try {
+      const res = await fetch(`/api/auth/role?email=${encodeURIComponent(email)}`);
+      if (res.ok) {
+        const data = await res.json();
+        currentUserRole = data.role || 'editor';
+        localStorage.setItem('designcraft_role', currentUserRole);
+        return currentUserRole;
+      }
+    } catch (e) {
+      console.warn('[EditorialRole] Could not fetch role:', e);
+    }
+    return 'editor';
+  }
+
+  // Initial role fetch (awaited inside acquireLease before evaluating privileges)
+  const initialRolePromise = syncRole(redactorId);
+
+  // React to Google Login in real-time
+  if (window.DesignCraftCloud?.listeners) {
+    window.DesignCraftCloud.listeners.add(async (state) => {
+      if (state?.user?.email && state.user.email !== redactorId) {
+        identity = resolveIdentity();
+        redactorId = identity.id;
+        redactorName = identity.name;
+        redactorPicture = identity.picture;
+        await syncRole(redactorId);
+        acquireLease();
+      }
+    });
   }
 
   let heartbeatTimer = null;
@@ -2912,11 +2957,54 @@ export function initEditorialLeaseManager() {
 
       if (res.ok) {
         leaseAcquired = true;
+        const avatarHtml = redactorPicture
+          ? `<img src="${redactorPicture}" alt="" style="width:18px;height:18px;border-radius:50%;object-fit:cover;vertical-align:middle;border:1px solid #16a34a;">`
+          : `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;"></span>`;
+
         badge.innerHTML = `
-          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;"></span>
+          ${avatarHtml}
           <span>Bloqueo exclusivo: <strong style="color:#0f172a;">${redactorName}</strong></span>
         `;
-        badge.title = 'Tienes el control exclusivo para editar esta página sin colisiones.';
+        badge.title = `Tienes el control exclusivo para editar esta página sin colisiones (${redactorId}).`;
+
+        // Check if page has assignedTo restriction
+        try {
+          await initialRolePromise;
+          const edRes = await fetch(`/api/documents/${encodeURIComponent(docId)}/editorial`);
+          if (edRes.ok) {
+            const overview = await edRes.json();
+            const pages = Array.isArray(overview) ? overview : overview?.pages;
+            const firstPage = Array.isArray(pages) ? pages[0] : null;
+            if (firstPage?.assignedTo) {
+              const assigned = firstPage.assignedTo.trim().toLowerCase();
+              const myEmail = (redactorId || '').trim().toLowerCase();
+              const myName = (redactorName || '').trim().toLowerCase();
+              const isPrivileged = currentUserRole === 'admin' || currentUserRole === 'designer';
+
+              if (!isPrivileged && assigned !== myEmail && assigned !== myName) {
+                window.__designcraft_readonly = true;
+                const btnSave = document.getElementById('btn-save-page');
+                if (btnSave) {
+                  btnSave.disabled = true;
+                  btnSave.title = `Página asignada a ${firstPage.assignedTo}`;
+                }
+                badge.innerHTML = `
+                  <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#eab308;"></span>
+                  <span>Solo lectura: asignada a <strong>${firstPage.assignedTo}</strong></span>
+                `;
+                badge.title = `Esta página está asignada a ${firstPage.assignedTo}. No puedes modificar su contenido.`;
+                showCloudToast({
+                  type: 'info',
+                  title: 'Página Asignada',
+                  message: `Esta página está asignada a ${firstPage.assignedTo}. Abierta en modo de sólo lectura.`,
+                  duration: 8000,
+                });
+              }
+            }
+          }
+        } catch (e) {
+          // ignore editorial fetch error
+        }
 
         // Setup heartbeat every 30s
         if (!heartbeatTimer) {
@@ -2968,6 +3056,16 @@ export function initEditorialLeaseManager() {
       animation: cloudModalIn 0.2s ease-out;
     `;
 
+    const isPrivileged = currentUserRole === 'admin' || currentUserRole === 'designer';
+
+    const forceBtnHtml = isPrivileged
+      ? `<button id="btn-lease-force" style="background:#dc2626;color:#ffffff;border:none;padding:11px 16px;border-radius:8px;font-size:13.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 12px rgba(220,38,38,0.25);">
+           ⚡ Forzar Desbloqueo y Tomar Control (Jefe / Diseñador)
+         </button>`
+      : `<div style="font-size:12px;color:#64748b;text-align:center;padding:8px;background:#f8fafc;border-radius:6px;border:1px dashed #cbd5e1;">
+           🔒 Solo un jefe de redacción o diseñador puede forzar la liberación de esta página.
+         </div>`;
+
     overlay.innerHTML = `
       <div style="background:#ffffff;border-radius:16px;max-width:520px;width:92%;padding:28px;box-shadow:0 25px 60px rgba(0,0,0,0.3);border:1px solid #e2e8f0;">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
@@ -2988,9 +3086,7 @@ export function initEditorialLeaseManager() {
           <button id="btn-lease-readonly" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;padding:11px 16px;border-radius:8px;font-size:13.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
             👁️ Continuar en Modo Sólo Lectura
           </button>
-          <button id="btn-lease-force" style="background:#dc2626;color:#ffffff;border:none;padding:11px 16px;border-radius:8px;font-size:13.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 12px rgba(220,38,38,0.25);">
-            ⚡ Forzar Desbloqueo y Tomar Control
-          </button>
+          ${forceBtnHtml}
           <button id="btn-lease-back" style="background:transparent;color:#64748b;border:none;padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;">
             ← Volver a la Galería de Plantillas
           </button>
@@ -3015,29 +3111,32 @@ export function initEditorialLeaseManager() {
       });
     });
 
-    overlay.querySelector('#btn-lease-force').addEventListener('click', async () => {
-      overlay.remove();
-      badge.innerHTML = `
-        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#eab308;animation:pulseDot 1.5s infinite;"></span>
-        <span>Tomando control forzado...</span>
-      `;
-      try {
-        await fetch(`/api/documents/${encodeURIComponent(docId)}/release`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ force: true }),
-        });
-        await acquireLease();
-        showCloudToast({
-          type: 'success',
-          title: 'Control Exclusivo Obtenido',
-          message: 'Has liberado el bloqueo y tomado el control de edición de la página.',
-          duration: 6000,
-        });
-      } catch (err) {
-        console.error('Error forcing lease release:', err);
-      }
-    });
+    const btnForce = overlay.querySelector('#btn-lease-force');
+    if (btnForce) {
+      btnForce.addEventListener('click', async () => {
+        overlay.remove();
+        badge.innerHTML = `
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#eab308;animation:pulseDot 1.5s infinite;"></span>
+          <span>Tomando control forzado...</span>
+        `;
+        try {
+          await fetch(`/api/documents/${encodeURIComponent(docId)}/release`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ force: true }),
+          });
+          await acquireLease();
+          showCloudToast({
+            type: 'success',
+            title: 'Control Exclusivo Obtenido',
+            message: 'Has liberado el bloqueo y tomado el control de edición de la página.',
+            duration: 6000,
+          });
+        } catch (err) {
+          console.error('Error forcing lease release:', err);
+        }
+      });
+    }
 
     overlay.querySelector('#btn-lease-back').addEventListener('click', () => {
       window.location.href = '/galeria';

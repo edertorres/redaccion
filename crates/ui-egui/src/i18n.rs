@@ -348,6 +348,36 @@ const TABLE: &[(&str, [&str; 5])] = &[
     ("Delete Row", ["Delete Row", "Delete Row", "Delete Row", "Delete Row", "删除行"]),
     ("Delete Swatch", ["Delete Swatch", "Delete Swatch", "Delete Swatch", "Delete Swatch", "删除色板"]),
     ("Delete Unused Layers", ["Delete Unused Layers", "Delete Unused Layers", "Delete Unused Layers", "Delete Unused Layers", "删除未使用的图层"]),
+    (
+        "Delete Unused Paragraph Styles",
+        [
+            "Nicht verwendete Absatzformate löschen",
+            "Supprimer les styles de paragraphe inutilisés",
+            "Eliminar estilos de párrafo no usados",
+            "未使用の段落スタイルを削除",
+            "删除未使用的段落样式",
+        ],
+    ),
+    (
+        "Delete Unused Character Styles",
+        [
+            "Nicht verwendete Zeichenformate löschen",
+            "Supprimer les styles de caractère inutilisés",
+            "Eliminar estilos de carácter no usados",
+            "未使用の文字スタイルを削除",
+            "删除未使用的字符样式",
+        ],
+    ),
+    (
+        "Delete All Unused Styles",
+        [
+            "Alle nicht verwendeten Formate löschen",
+            "Supprimer tous les styles inutilisés",
+            "Eliminar todos los estilos no usados",
+            "未使用のスタイルをすべて削除",
+            "删除所有未使用的样式",
+        ],
+    ),
     ("Desired", ["Optimal", "Souhaité", "Óptimo", "最適", "最佳"]),
     ("Dialog", ["Dialog", "Dialog", "Dialog", "Dialog", "对话框"]),
     ("Document", ["Document", "Document", "Document", "Document", "文档"]),

@@ -67,14 +67,33 @@ fn list(app: &mut DesignApp, ui: &mut egui::Ui, para: bool) {
                 }
             }
             ui.menu_button("☰", |ui| {
+                let kind = if para { "paragraph" } else { "character" };
                 let load_label = if para { "Load Paragraph Styles…" } else { "Load Character Styles…" };
                 if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, load_label))).clicked() {
-                    let kind = if para { "paragraph" } else { "character" };
                     let _ = app.run("app.loadStyles", json!({"kinds": [kind]}));
                     ui.close();
                 }
                 if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Load All Styles…"))).clicked() {
                     let _ = app.run("app.loadStyles", json!({}));
+                    ui.close();
+                }
+                ui.separator();
+                let unused_label = if para { "Delete Unused Paragraph Styles" } else { "Delete Unused Character Styles" };
+                if ui
+                    .add_enabled(!app.session.editor_mode, egui::Button::new(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, unused_label))))
+                    .clicked()
+                {
+                    run_delete_unused_styles(app, kind);
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(
+                        !app.session.editor_mode,
+                        egui::Button::new(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Delete All Unused Styles"))),
+                    )
+                    .clicked()
+                {
+                    run_delete_unused_styles(app, "all");
                     ui.close();
                 }
             });
@@ -214,6 +233,80 @@ fn style_row(app: &mut DesignApp, ui: &mut egui::Ui, para: bool, n: &str, curren
                 }
                 ui.data_mut(|d| d.insert_temp(id, name));
             });
+            ui.separator();
+            let del_cmd = if para { "style.paragraph.delete" } else { "style.character.delete" };
+            if ui
+                .add_enabled(
+                    !app.session.editor_mode,
+                    egui::Button::new(crate::rtl::widget(ui, format!("{} \"{}\"", crate::i18n::tr(&app.ui.language, "Delete"), label))),
+                )
+                .clicked()
+            {
+                let _ = app.run(del_cmd, json!({"name": n}));
+                ui.close();
+            }
         }
     });
+}
+
+fn run_delete_unused_styles(app: &mut DesignApp, kind: &str) {
+    if let Ok(res) = app.run("style.deleteUnused", json!({"kind": kind})) {
+        let count = res.get("deleted").and_then(serde_json::Value::as_u64).unwrap_or(0);
+        if count == 0 {
+            app.status("No unused styles to delete.");
+        } else {
+            app.status(format!("Deleted {count} unused style(s)."));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn styles_panel_menu_deletes_unused_styles() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let mut app = crate::DesignApp::new(designcraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({})).unwrap();
+        app.run("style.paragraph.create", json!({"name": "UsedPara"})).unwrap();
+        app.run("style.paragraph.create", json!({"name": "UnusedPara"})).unwrap();
+        app.run("style.character.create", json!({"name": "UnusedChar"})).unwrap();
+
+        app.run("frame.create", json!({"rect": [10, 10, 200, 100], "content": "text", "text": "Hello"})).unwrap();
+        app.run("style.paragraph.apply", json!({"name": "UsedPara"})).unwrap();
+
+        let mut initialized = false;
+        let mut h = Harness::builder().with_size(egui::vec2(320.0, 400.0)).build_ui_state(
+            move |ui, app| {
+                if !initialized {
+                    crate::theme::install_fonts(ui.ctx(), "");
+                    initialized = true;
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                paragraph(app, ui);
+            },
+            app,
+        );
+        h.run();
+        h.get_by_label("☰").click();
+        h.run();
+        h.get_by_label("Delete Unused Paragraph Styles").click();
+        h.run();
+
+        let doc = &h.state().session.doc().unwrap().doc;
+        assert!(doc.styles.para("UsedPara").is_some());
+        assert!(doc.styles.para("UnusedPara").is_none());
+        assert!(doc.styles.char_style("UnusedChar").is_some());
+
+        // Now delete all remaining unused styles (UnusedChar) from the menu
+        h.get_by_label("☰").click();
+        h.run();
+        h.get_by_label("Delete All Unused Styles").click();
+        h.run();
+
+        let doc = &h.state().session.doc().unwrap().doc;
+        assert!(doc.styles.char_style("UnusedChar").is_none());
+    }
 }

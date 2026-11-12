@@ -268,6 +268,10 @@ fn overview(s: &mut Session, _: &Value) -> Result<Value> {
     let mut approved_count = 0usize;
     let mut overset_count = 0usize;
     let mut pages_out = Vec::with_capacity(n_pages);
+    let is_dirty = st.is_dirty();
+    let last_saved = st.last_saved;
+    let doc_title = st.title();
+    let doc_path = st.path.clone();
 
     for (abs_idx, _, page) in d.pages() {
         let is_approved = page.editorial.status == PageStatus::Approved;
@@ -301,6 +305,8 @@ fn overview(s: &mut Session, _: &Value) -> Result<Value> {
             "hasOverset": has_overset,
             "storiesCount": stories_per_page.get(abs_idx).copied().unwrap_or(0),
             "graphicsCount": graphics_per_page.get(abs_idx).copied().unwrap_or(0),
+            "isDirty": is_dirty,
+            "lastSaved": last_saved,
         }));
     }
 
@@ -308,6 +314,10 @@ fn overview(s: &mut Session, _: &Value) -> Result<Value> {
         "pageCount": n_pages,
         "approvedCount": approved_count,
         "oversetCount": overset_count,
+        "isDirty": is_dirty,
+        "lastSaved": last_saved,
+        "docTitle": doc_title,
+        "docPath": doc_path,
         "pages": pages_out
     }))
 }

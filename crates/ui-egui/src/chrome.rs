@@ -572,6 +572,48 @@ pub fn status_bar(app: &mut DesignApp, ui: &mut egui::Ui) {
                     }
                 }
                 ui.add_space(8.0);
+                if let Some(st) = app.session.active() {
+                    let is_dirty = st.is_dirty();
+                    let (save_text, save_color, tooltip) = if is_dirty {
+                        ("🟠 Modificado ▾", Color32::from_rgb(230, 140, 30), "Cambios sin guardar (clic para guardar o ver historial)")
+                    } else if let Some(ts) = st.last_saved {
+                        let _ = ts;
+                        ("🟢 Guardado ▾", Color32::from_rgb(60, 180, 80), "Documento al día")
+                    } else {
+                        ("🟢 Al día ▾", Color32::from_rgb(60, 180, 80), "Documento guardado")
+                    };
+                    let full_label = if let Some(ts) = st.last_saved
+                        && !is_dirty
+                    {
+                        format!("🟢 {} ▾", designcraft_doc::vars::format_date(ts, "HH:mm"))
+                    } else {
+                        save_text.to_string()
+                    };
+                    ui.menu_button(egui::RichText::new(full_label).font(small.clone()).color(save_color), |ui| {
+                        if is_dirty {
+                            ui.label(egui::RichText::new("⚠ Hay cambios sin guardar").strong().color(Color32::from_rgb(230, 140, 30)));
+                            if ui.button("💾 Guardar cambios ahora (Cmd+S)").clicked() {
+                                let _ = app.run("app.save", json!({}));
+                                ui.close();
+                            }
+                        } else {
+                            ui.label(egui::RichText::new("✓ El documento está al día").color(Color32::from_rgb(60, 180, 80)));
+                        }
+                        ui.separator();
+                        if ui.button("🕒 Ver Historial de Versiones…").clicked() {
+                            app.ui.dialog = Some(crate::dialogs::Dialog::new("versionHistory", json!({})));
+                            ui.close();
+                        }
+                        if ui.button("🏷 Crear Hito / Respaldo de Edición…").clicked() {
+                            let _ = app.run("file.backup.create", json!({"label": "hito_edicion"}));
+                            app.status("Hito de edición creado correctamente.");
+                            ui.close();
+                        }
+                    })
+                    .response
+                    .on_hover_text(tooltip);
+                    ui.add_space(8.0);
+                }
                 if ui
                     .button(egui::RichText::new("📰 Panorama").font(small.clone()))
                     .on_hover_text("Ver todas las páginas y estados de la edición")

@@ -13,7 +13,7 @@ use crate::{DocState, EngineError, Result, Session};
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(noundo "file.new", "Document…", ["File", "New"], Some("Cmd+N"),
-            "{preset?: \"Letter\"|\"A4\"|…, width?, height?, pages?, facingPages?, columns?, gutter?, margins?: number|{top,bottom,inside,outside}, bleed?, title?}",
+            "{preset?: \"Letter\"|\"A4\"|…, width?, height?, pages?, facingPages?, columns?, gutter?, margins?: number|{top,bottom,inside,outside}, bleed?, title?, intent?: \"print\"|\"web\"|\"mobile\"}",
             always, file_new),
         cmd!(noundo "file.newSample", "Sample Document", ["Help"], None, "{} — a multi-page magazine sample", always, file_sample),
         cmd!(query "file.presets", "Document Presets", [], None, "{}", always, |_, _| Ok(serde_json::to_value(PRESETS).unwrap_or_default())),
@@ -46,6 +46,10 @@ pub fn specs() -> Vec<CommandSpec> {
             let dir = recovery_dir(s, p)?;
             Ok(json!({"opened": crate::recovery::open(s, &dir)?}))
         }),
+        cmd!(query "file.backup.list", "List Document Backups", [], None, "{path?} → [{filename, timestamp, formattedDate, formattedTime, size, label, isMilestone}]", has_doc, file_backup_list),
+        cmd!(noundo "file.backup.create", "Create Backup Snapshot", ["File"], None, "{label?} → {filename, timestamp, size, label}", has_doc, file_backup_create),
+        cmd!(noundo "file.backup.restore", "Restore Backup Snapshot", ["File"], None, "{filename} — restore document from backup file (creates safety pre-restore snapshot first)", has_doc, file_backup_restore),
+        cmd!(noundo "file.backup.prune", "Prune Document Backups", ["File"], None, "{} → {deletedCount, freedBytes}", has_doc, file_backup_prune),
         cmd!(query "file.serialize", "Serialize", [], None, "{} → {base64, bytes} the .designcraft file", has_doc, |s, _| {
             let st = s.doc()?;
             // Preview fill is session state. Serialize the unfilled template.
@@ -141,6 +145,9 @@ fn file_new(s: &mut Session, p: &Value) -> Result<Value> {
     }
     if let Some(b) = p.get("bleed").and_then(Value::as_f64) {
         nd.bleed = [b; 4];
+    }
+    if let Some(i) = p.get("intent").and_then(|v| serde_json::from_value::<designcraft_doc::Intent>(v.clone()).ok()) {
+        nd.intent = i;
     }
     s.untitled += 1;
     nd.title = str_param(p, "title").map(str::to_string).unwrap_or_else(|| format!("Untitled-{}", s.untitled));
@@ -302,6 +309,7 @@ fn file_save(s: &mut Session, p: &Value) -> Result<Value> {
     st.path = Some(path.clone());
     st.saved_revision = st.revision;
     st.saved_doc = st.doc.clone();
+    st.last_saved = Some(designcraft_doc::vars::now());
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(dir) = &s.recovery_dir {
         let uid = s.doc()?.uid;
@@ -736,6 +744,240 @@ fn file_revert(s: &mut Session, _: &Value) -> Result<Value> {
     }
 }
 
+#[allow(dead_code, unused_variables)]
+fn file_backups_dir(st: &DocState, s: &Session) -> Option<std::path::PathBuf> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (st, s);
+        None
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if let Some(p) = &st.path {
+            let path = std::path::Path::new(p);
+            let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+            return Some(parent.join(".backups"));
+        }
+        let doc_backups = std::path::PathBuf::from("documents/.backups");
+        if doc_backups.is_dir() {
+            return Some(doc_backups);
+        }
+        s.recovery_dir.clone().or_else(|| std::env::current_dir().ok().map(|d| d.join(".backups")))
+    }
+}
+
+fn doc_stem(st: &DocState) -> String {
+    if let Some(p) = &st.path {
+        let path = std::path::Path::new(p);
+        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+            return stem.to_string();
+        }
+    }
+    let title = st.title();
+    let stem = std::path::Path::new(&title).file_stem().and_then(|s| s.to_str()).unwrap_or(&title);
+    let clean = stem.replace(' ', "_");
+    if clean.is_empty() { "document".into() } else { clean }
+}
+
+#[allow(unused_variables)]
+fn file_backup_list(s: &mut Session, _: &Value) -> Result<Value> {
+    let st = s.doc()?;
+    let stem = doc_stem(st);
+    let mut list: Vec<Value> = Vec::new();
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(dir) = file_backups_dir(st, s)
+        && let Ok(rd) = std::fs::read_dir(&dir)
+    {
+        for entry in rd.flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|x| x.to_str()) != Some("designcraft") {
+                continue;
+            }
+            let fname = entry.file_name().to_string_lossy().to_string();
+            let Some(rest) = fname.strip_prefix(&format!("{stem}_")).and_then(|s| s.strip_suffix(".designcraft")) else {
+                continue;
+            };
+            let meta = entry.metadata().ok();
+            let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+            let (ts_str, label) = if let Some((ts, lbl)) = rest.split_once('_') { (ts, Some(lbl.to_string())) } else { (rest, None) };
+            let timestamp = ts_str.parse::<i64>().unwrap_or_else(|_| {
+                meta.and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0)
+            });
+            let is_milestone = label.as_deref().is_some_and(|l| {
+                let l_low = l.to_ascii_lowercase();
+                l_low.contains("cierre") || l_low.contains("hito") || l_low.contains("aprobado") || l_low.contains("milestone")
+            });
+            let formatted_date = designcraft_doc::vars::format_date(timestamp, "yyyy-MM-dd");
+            let formatted_time = designcraft_doc::vars::format_date(timestamp, "HH:mm:ss");
+            list.push(json!({
+                "filename": fname,
+                "timestamp": timestamp,
+                "formattedDate": formatted_date,
+                "formattedTime": formatted_time,
+                "size": size,
+                "label": label.unwrap_or_else(|| "Autoguardado".into()),
+                "isMilestone": is_milestone,
+            }));
+        }
+    }
+    list.sort_by_key(|a| std::cmp::Reverse(a["timestamp"].as_i64().unwrap_or(0)));
+    Ok(Value::Array(list))
+}
+
+#[allow(unused_variables)]
+fn file_backup_create(s: &mut Session, p: &Value) -> Result<Value> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (s, p);
+        Err(EngineError::Other("backups need a file system".into()))
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let st = s.doc()?;
+        let stem = doc_stem(st);
+        let dir = file_backups_dir(st, s).ok_or_else(|| bad("file.backup.create", "cannot determine backups directory"))?;
+        std::fs::create_dir_all(&dir).map_err(|e| EngineError::Other(format!("{}: {e}", dir.display())))?;
+        let now = designcraft_doc::vars::now();
+        let raw_label = str_param(p, "label").unwrap_or("manual");
+        let safe_label: String = raw_label.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
+        let fname = format!("{stem}_{now}_{safe_label}.designcraft");
+        let backup_path = dir.join(&fname);
+        let tmp = backup_path.with_extension("tmp");
+        let bytes = to_bytes(&st.doc);
+        std::fs::write(&tmp, &bytes).map_err(|e| EngineError::Other(format!("{}: {e}", tmp.display())))?;
+        std::fs::rename(&tmp, &backup_path).map_err(|e| EngineError::Other(format!("{}: {e}", backup_path.display())))?;
+        Ok(json!({
+            "filename": fname,
+            "timestamp": now,
+            "size": bytes.len(),
+            "label": raw_label
+        }))
+    }
+}
+
+#[allow(unused_variables)]
+fn file_backup_restore(s: &mut Session, p: &Value) -> Result<Value> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (s, p);
+        Err(EngineError::Other("backups need a file system".into()))
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let fname = str_param(p, "filename").ok_or_else(|| bad("file.backup.restore", "missing `filename`"))?;
+        if fname.is_empty() || fname.contains('/') || fname.contains('\\') || fname.contains("..") || !fname.ends_with(".designcraft") {
+            return Err(bad("file.backup.restore", format!("invalid backup filename `{fname}`")));
+        }
+        let st = s.doc()?;
+        let dir = file_backups_dir(st, s).ok_or_else(|| bad("file.backup.restore", "cannot determine backups directory"))?;
+        let backup_path = dir.join(fname);
+        if !backup_path.is_file() {
+            return Err(bad("file.backup.restore", format!("backup file `{fname}` not found")));
+        }
+        let stem = doc_stem(st);
+        let now = designcraft_doc::vars::now();
+        let safety_file = dir.join(format!("{stem}_{now}_pre_restore.designcraft"));
+        let cur_bytes = to_bytes(&st.doc);
+        let _ = std::fs::write(&safety_file, &cur_bytes);
+
+        let bytes = std::fs::read(&backup_path).map_err(|e| EngineError::Other(format!("{}: {e}", backup_path.display())))?;
+        let restored_doc = from_bytes(&bytes)?;
+        let path_opt = s.doc()?.path.clone();
+
+        let st_mut = s.doc_mut()?;
+        st_mut.doc = Arc::new(restored_doc);
+        st_mut.revision = st_mut.revision.saturating_add(1);
+
+        if let Some(path) = path_opt {
+            let res_bytes = to_bytes(&st_mut.doc);
+            let _ = std::fs::write(&path, &res_bytes);
+            st_mut.saved_revision = st_mut.revision;
+            st_mut.saved_doc = st_mut.doc.clone();
+            st_mut.last_saved = Some(now);
+        }
+
+        Ok(json!({
+            "restored": true,
+            "filename": fname,
+            "timestamp": now
+        }))
+    }
+}
+
+#[allow(unused_variables)]
+fn file_backup_prune(s: &mut Session, p: &Value) -> Result<Value> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (s, p);
+        Err(EngineError::Other("backups need a file system".into()))
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let st = s.doc()?;
+        let stem = doc_stem(st);
+        let dir = file_backups_dir(st, s).ok_or_else(|| bad("file.backup.prune", "cannot determine backups directory"))?;
+        if !dir.is_dir() {
+            return Ok(json!({"deletedCount": 0, "freedBytes": 0}));
+        }
+        let now = designcraft_doc::vars::now();
+        let mut entries = Vec::new();
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for entry in rd.flatten() {
+                let fname = entry.file_name().to_string_lossy().to_string();
+                if let Some(rest) = fname.strip_prefix(&format!("{stem}_")).and_then(|s| s.strip_suffix(".designcraft")) {
+                    let (ts_str, label) = if let Some((ts, lbl)) = rest.split_once('_') { (ts, Some(lbl.to_string())) } else { (rest, None) };
+                    let ts = ts_str.parse::<i64>().unwrap_or(0);
+                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                    let is_milestone = label.as_deref().is_some_and(|l| {
+                        let l_low = l.to_ascii_lowercase();
+                        l_low.contains("cierre") || l_low.contains("hito") || l_low.contains("aprobado") || l_low.contains("milestone")
+                    });
+                    entries.push((entry.path(), ts, size, is_milestone));
+                }
+            }
+        }
+        entries.sort_by_key(|a| std::cmp::Reverse(a.1));
+
+        let mut deleted_count = 0usize;
+        let mut freed_bytes = 0u64;
+        let mut kept_timestamps: Vec<i64> = Vec::new();
+
+        for (idx, (path, ts, size, is_milestone)) in entries.into_iter().enumerate() {
+            if idx < 5 || is_milestone {
+                kept_timestamps.push(ts);
+                continue;
+            }
+            let age_secs = (now - ts).max(0);
+            let should_prune = if age_secs < 900 {
+                kept_timestamps.iter().any(|&k| (k - ts).abs() < 120)
+            } else if age_secs < 7200 {
+                kept_timestamps.iter().any(|&k| (k - ts).abs() < 600)
+            } else if age_secs < 86400 {
+                kept_timestamps.iter().any(|&k| (k - ts).abs() < 3600)
+            } else {
+                age_secs > 7 * 86400 || kept_timestamps.iter().any(|&k| (k - ts).abs() < 86400)
+            };
+
+            if should_prune {
+                if std::fs::remove_file(&path).is_ok() {
+                    deleted_count = deleted_count.saturating_add(1);
+                    freed_bytes = freed_bytes.saturating_add(size);
+                }
+            } else {
+                kept_timestamps.push(ts);
+            }
+        }
+
+        Ok(json!({
+            "deletedCount": deleted_count,
+            "freedBytes": freed_bytes
+        }))
+    }
+}
+
 #[cfg(test)]
 mod pdf_crop_tests {
     use serde_json::json;
@@ -1050,5 +1292,57 @@ mod document_fonts_tests {
         let st = s.active().unwrap();
         assert_eq!(st.doc.spreads[0].items.len(), 1, "no orphan duplicate frame was created");
         assert_eq!(st.doc.item(designcraft_doc::ItemId(grp)).unwrap().children().len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod backup_tests {
+    use super::*;
+
+    #[test]
+    fn file_backup_lifecycle_create_list_restore_prune() {
+        let dir = std::env::temp_dir().join(format!("dc-backup-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let doc_file = dir.join("2026-11-05_PAG-01_PORTADA.designcraft");
+        let mut s = Session::new();
+        s.execute("file.new", &json!({})).unwrap();
+        s.execute("frame.create", &json!({"rect": [10, 10, 100, 100], "content": "text", "text": "Version Inicial"})).unwrap();
+        s.execute("file.save", &json!({"path": doc_file.to_string_lossy()})).unwrap();
+
+        // 1. Create a milestone backup snapshot
+        let cr = s.execute("file.backup.create", &json!({"label": "cierre_1"})).unwrap();
+        let fname = cr["filename"].as_str().unwrap().to_string();
+        assert!(fname.contains("cierre_1"));
+
+        // 2. Modify the document
+        s.execute("frame.create", &json!({"rect": [20, 20, 80, 80], "content": "text", "text": "Cambio posterior"})).unwrap();
+        assert_eq!(s.doc().unwrap().doc.spreads[0].items.len(), 2);
+
+        // 3. List backups
+        let list = s.execute("file.backup.list", &json!({})).unwrap();
+        let arr = list.as_array().unwrap();
+        assert!(!arr.is_empty());
+        assert_eq!(arr[0]["filename"], fname);
+        assert!(arr[0]["isMilestone"].as_bool().unwrap());
+        assert_eq!(arr[0]["label"], "cierre_1");
+
+        // 4. Restore the backup
+        let res = s.execute("file.backup.restore", &json!({"filename": fname})).unwrap();
+        assert!(res["restored"].as_bool().unwrap());
+        // Verify document was restored back to 1 item
+        assert_eq!(s.doc().unwrap().doc.spreads[0].items.len(), 1);
+
+        // 5. Verify safety snapshot pre_restore was created
+        let list2 = s.execute("file.backup.list", &json!({})).unwrap();
+        let arr2 = list2.as_array().unwrap();
+        assert!(arr2.iter().any(|b| b["filename"].as_str().unwrap().contains("pre_restore")));
+
+        // 6. Test prune
+        let prune_res = s.execute("file.backup.prune", &json!({})).unwrap();
+        assert!(prune_res.get("deletedCount").is_some());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
