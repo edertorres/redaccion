@@ -70,11 +70,11 @@ fn list(app: &mut DesignApp, ui: &mut egui::Ui, para: bool) {
                 let kind = if para { "paragraph" } else { "character" };
                 let load_label = if para { "Load Paragraph Styles…" } else { "Load Character Styles…" };
                 if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, load_label))).clicked() {
-                    let _ = app.run("app.loadStyles", json!({"kinds": [kind]}));
+                    let _ = app.run("app.loadStyles", json!({"kinds": [kind], "replace": true}));
                     ui.close();
                 }
                 if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, "Load All Styles…"))).clicked() {
-                    let _ = app.run("app.loadStyles", json!({}));
+                    let _ = app.run("app.loadStyles", json!({"replace": true}));
                     ui.close();
                 }
                 ui.separator();

@@ -957,18 +957,23 @@ pub fn run_ui(app: &mut DesignApp, id: &str, p: &Value) -> Option<Result<Value, 
         }
         "app.loadStyles" => {
             let kinds = p.get("kinds").cloned();
-            let replace = p.get("replace").cloned();
+            let replace = p.get("replace").and_then(Value::as_bool).unwrap_or(true);
             if let Some(pick) = app.services.pick_open.as_mut() {
                 return Some(match pick("styles") {
                     Some(path) => {
-                        let mut params = json!({"path": path});
+                        let mut params = json!({"path": path, "replace": replace});
                         if let Some(k) = kinds {
                             params["kinds"] = k;
                         }
-                        if let Some(r) = replace {
-                            params["replace"] = r;
+                        let res = app.run("style.load", params);
+                        if let Ok(ref v) = res {
+                            let added = v.get("added").and_then(|a| a.get("paragraph")).and_then(Value::as_u64).unwrap_or(0)
+                                + v.get("added").and_then(|a| a.get("character")).and_then(Value::as_u64).unwrap_or(0);
+                            let rep = v.get("replaced").and_then(|a| a.get("paragraph")).and_then(Value::as_u64).unwrap_or(0)
+                                + v.get("replaced").and_then(|a| a.get("character")).and_then(Value::as_u64).unwrap_or(0);
+                            app.status(format!("Estilos cargados: {added} añadido(s), {rep} sobrescrito(s)."));
                         }
-                        app.run("style.load", params)
+                        res
                     }
                     None => Ok(Value::Null),
                 });

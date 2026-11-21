@@ -1325,7 +1325,7 @@ fn load_source_doc(p: &Value) -> Result<designcraft_doc::Document> {
 
 fn load_styles(s: &mut Session, p: &Value) -> Result<Value> {
     let src = load_source_doc(p)?;
-    let replace = p.get("replace").and_then(Value::as_bool).unwrap_or(false);
+    let replace = p.get("replace").and_then(Value::as_bool).unwrap_or(true);
     let kinds: Option<std::collections::HashSet<String>> =
         p.get("kinds").and_then(Value::as_array).map(|arr| arr.iter().filter_map(Value::as_str).map(|s| s.to_ascii_lowercase()).collect());
     let load_all = kinds.is_none();
@@ -1344,7 +1344,8 @@ fn load_styles(s: &mut Session, p: &Value) -> Result<Value> {
         let (mut added_sw, mut rep_sw) = (0, 0);
 
         for sw in &src.swatches {
-            match d.swatches.iter_mut().find(|x| x.name == sw.name) {
+            let norm_trim = sw.name.trim();
+            match d.swatches.iter_mut().find(|x| x.name == sw.name || x.name.trim() == norm_trim) {
                 Some(x) if !x.locked => {
                     if replace {
                         x.value = sw.value.clone();
@@ -1367,10 +1368,14 @@ fn load_styles(s: &mut Session, p: &Value) -> Result<Value> {
                 if ps.name == designcraft_doc::NO_PARA_STYLE {
                     continue;
                 }
-                match st.paragraph.iter_mut().find(|x| x.name == ps.name) {
+                let norm = ps.name.replace(':', "/");
+                let norm_trim = norm.trim();
+                match st.paragraph.iter_mut().find(|x| x.name == ps.name || x.name.replace(':', "/").trim() == norm_trim) {
                     Some(x) => {
                         if replace {
+                            let keep_name = x.name.clone();
                             *x = ps.clone();
+                            x.name = keep_name;
                             rep_p += 1;
                         }
                     }
@@ -1387,10 +1392,14 @@ fn load_styles(s: &mut Session, p: &Value) -> Result<Value> {
                 if cs.name == designcraft_doc::NO_CHAR_STYLE {
                     continue;
                 }
-                match st.character.iter_mut().find(|x| x.name == cs.name) {
+                let norm = cs.name.replace(':', "/");
+                let norm_trim = norm.trim();
+                match st.character.iter_mut().find(|x| x.name == cs.name || x.name.replace(':', "/").trim() == norm_trim) {
                     Some(x) => {
                         if replace {
+                            let keep_name = x.name.clone();
                             *x = cs.clone();
+                            x.name = keep_name;
                             rep_c += 1;
                         }
                     }
@@ -1407,10 +1416,14 @@ fn load_styles(s: &mut Session, p: &Value) -> Result<Value> {
                 if os.name == designcraft_doc::NO_OBJECT_STYLE {
                     continue;
                 }
-                match st.object.iter_mut().find(|x| x.name == os.name) {
+                let norm = os.name.replace(':', "/");
+                let norm_trim = norm.trim();
+                match st.object.iter_mut().find(|x| x.name == os.name || x.name.replace(':', "/").trim() == norm_trim) {
                     Some(x) => {
                         if replace {
+                            let keep_name = x.name.clone();
                             *x = os.clone();
+                            x.name = keep_name;
                             rep_o += 1;
                         }
                     }
@@ -1427,10 +1440,14 @@ fn load_styles(s: &mut Session, p: &Value) -> Result<Value> {
                 if cs.name == designcraft_doc::NO_CELL_STYLE {
                     continue;
                 }
-                match st.cell.iter_mut().find(|x| x.name == cs.name) {
+                let norm = cs.name.replace(':', "/");
+                let norm_trim = norm.trim();
+                match st.cell.iter_mut().find(|x| x.name == cs.name || x.name.replace(':', "/").trim() == norm_trim) {
                     Some(x) => {
                         if replace {
+                            let keep_name = x.name.clone();
                             *x = cs.clone();
+                            x.name = keep_name;
                             rep_cell += 1;
                         }
                     }
@@ -1447,10 +1464,14 @@ fn load_styles(s: &mut Session, p: &Value) -> Result<Value> {
                 if ts.name == designcraft_doc::BASIC_TABLE {
                     continue;
                 }
-                match st.table.iter_mut().find(|x| x.name == ts.name) {
+                let norm = ts.name.replace(':', "/");
+                let norm_trim = norm.trim();
+                match st.table.iter_mut().find(|x| x.name == ts.name || x.name.replace(':', "/").trim() == norm_trim) {
                     Some(x) => {
                         if replace {
+                            let keep_name = x.name.clone();
                             *x = ts.clone();
+                            x.name = keep_name;
                             rep_tbl += 1;
                         }
                     }
@@ -1458,6 +1479,18 @@ fn load_styles(s: &mut Session, p: &Value) -> Result<Value> {
                         st.table.push(ts.clone());
                         added_tbl += 1;
                     }
+                }
+            }
+        }
+
+        // When paragraph or character styles are replaced, bump revision on all stories
+        // so cached layouts and views re-render with the new style definitions.
+        if rep_p > 0 || rep_c > 0 {
+            for sid in d.stories.keys().copied().collect::<Vec<_>>() {
+                if let Some(story) = d.story_mut(sid) {
+                    story.for_each_text_mut(&mut |st| {
+                        st.rev = st.rev.saturating_add(1);
+                    });
                 }
             }
         }
@@ -2041,16 +2074,34 @@ mod style_load_tests {
         assert!(sb.doc().unwrap().doc.styles.char_style("CalloutStyle").is_none());
         assert!(sb.doc().unwrap().doc.swatch("BrandCoral").is_some());
 
-        // Test style.load with all kinds
+        // Test style.load with all kinds (defaults to replace: true for existing styles)
         let res2 = sb.execute("style.load", &json!({"base64": b64})).unwrap();
         assert_eq!(res2["added"]["character"], 1);
         assert_eq!(res2["added"]["paragraph"], 0);
+        assert_eq!(res2["replaced"]["paragraph"], 2); // [Basic Paragraph] + HeadlineStyle
         assert!(sb.doc().unwrap().doc.styles.char_style("CalloutStyle").is_some());
+
+        // Test explicit replace: false keeps existing definitions without replacing
+        let res_no_rep = sb.execute("style.load", &json!({"base64": b64, "replace": false})).unwrap();
+        assert_eq!(res_no_rep["replaced"]["paragraph"], 0);
+        assert_eq!(res_no_rep["replaced"]["character"], 0);
 
         // Test replace: true
         let res3 = sb.execute("style.load", &json!({"base64": b64, "replace": true})).unwrap();
         assert_eq!(res3["replaced"]["paragraph"], 2); // [Basic Paragraph] + HeadlineStyle
         assert_eq!(res3["replaced"]["character"], 1); // CalloutStyle
+
+        // Test that importing an updated style definition actually overwrites existing style attributes
+        let mut sa_updated = Session::new();
+        sa_updated.execute("file.new", &json!({})).unwrap();
+        sa_updated.execute("style.paragraph.create", &json!({"name": "HeadlineStyle"})).unwrap();
+        sa_updated.execute("style.paragraph.edit", &json!({"name": "HeadlineStyle", "chars": {"size": 28.0}})).unwrap();
+        let bytes_updated = super::super::file::to_bytes(&sa_updated.doc().unwrap().doc);
+        let b64_updated = super::super::file::base64_encode(&bytes_updated);
+
+        sb.execute("style.load", &json!({"base64": b64_updated})).unwrap();
+        let updated_ps = sb.doc().unwrap().doc.styles.para("HeadlineStyle").unwrap().clone();
+        assert_eq!(updated_ps.chars.size, Some(28.0), "HeadlineStyle size should be overwritten to 28.0");
 
         // Test cross-document clipboard copy & paste of item with styles
         let mut s_cross = Session::new();

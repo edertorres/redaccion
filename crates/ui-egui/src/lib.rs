@@ -674,9 +674,13 @@ impl DesignApp {
             }
             if let Some(style_name) = name.strip_prefix("styles:") {
                 let b64 = designcraft_engine::cmd::base64_encode(&bytes);
-                let res = self.run("style.load", json!({"base64": b64}));
-                if res.is_ok() {
-                    self.status(format!("Loaded styles from {style_name}"));
+                let res = self.run("style.load", json!({"base64": b64, "replace": true}));
+                if let Ok(ref v) = res {
+                    let added = v.get("added").and_then(|a| a.get("paragraph")).and_then(serde_json::Value::as_u64).unwrap_or(0)
+                        + v.get("added").and_then(|a| a.get("character")).and_then(serde_json::Value::as_u64).unwrap_or(0);
+                    let rep = v.get("replaced").and_then(|a| a.get("paragraph")).and_then(serde_json::Value::as_u64).unwrap_or(0)
+                        + v.get("replaced").and_then(|a| a.get("character")).and_then(serde_json::Value::as_u64).unwrap_or(0);
+                    self.status(format!("Estilos cargados desde {style_name}: {added} añadido(s), {rep} sobrescrito(s)."));
                 } else if let Err(e) = res {
                     self.status(format!("{name}: {e}"));
                 }
