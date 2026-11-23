@@ -104,10 +104,15 @@ pub fn start() {
                             let ctx_clone = cc.egui_ctx.clone();
                             let active_doc_clone = active_doc_id.clone();
                             let tmpl_raw = template_param.clone();
-                            wasm_bindgen_futures::spawn_local(async move {
-                                load_server_fonts(ctx_clone.clone(), inbox_clone.clone()).await;
 
-                                // 1. Try to load saved document draft first
+                            let ctx_f = ctx_clone.clone();
+                            let inbox_f = inbox_clone.clone();
+                            wasm_bindgen_futures::spawn_local(async move {
+                                load_server_fonts(ctx_f, inbox_f).await;
+                            });
+
+                            wasm_bindgen_futures::spawn_local(async move {
+                                // 1. Try to load saved document draft first immediately without waiting for fonts
                                 let enc_doc = js_sys::encode_uri_component(&target_stem).as_string().unwrap_or_else(|| target_stem.clone());
                                 let doc_url = format!("/api/documents/{enc_doc}");
                                 let mut loaded_bytes = None;
@@ -144,17 +149,15 @@ pub fn start() {
                                 }
 
                                 // 3. Fallback to localStorage backup
-                                if loaded_bytes.is_none() {
-                                    if let Some(window) = web_sys::window() {
-                                        if let Ok(Some(storage)) = window.local_storage() {
-                                            if let Ok(Some(b64)) = storage.get_item(&format!("designcraft_backup:{target_stem}")) {
-                                                let bytes = designcraft_engine::cmd::base64_decode(&b64);
-                                                if !bytes.is_empty() {
-                                                    log::info!("Restored draft `{target_stem}` from localStorage ({} bytes)", bytes.len());
-                                                    loaded_bytes = Some(bytes);
-                                                }
-                                            }
-                                        }
+                                if loaded_bytes.is_none()
+                                    && let Some(window) = web_sys::window()
+                                    && let Ok(Some(storage)) = window.local_storage()
+                                    && let Ok(Some(b64)) = storage.get_item(&format!("designcraft_backup:{target_stem}"))
+                                {
+                                    let bytes = designcraft_engine::cmd::base64_decode(&b64);
+                                    if !bytes.is_empty() {
+                                        log::info!("Restored draft `{target_stem}` from localStorage ({} bytes)", bytes.len());
+                                        loaded_bytes = Some(bytes);
                                     }
                                 }
 
@@ -260,11 +263,11 @@ async fn save_to_server(id: &str, bytes: &[u8]) -> Result<(), String> {
 
     // Only backup to localStorage if the document is small (<= 512 KB) to prevent
     // freezing the browser UI and exceeding the browser's 5MB origin quota.
-    if bytes.len() <= 512 * 1024 {
-        if let Ok(Some(storage)) = window.local_storage() {
-            let b64 = designcraft_engine::cmd::base64_encode(bytes);
-            let _ = storage.set_item(&format!("designcraft_backup:{clean}"), &b64);
-        }
+    if bytes.len() <= 512 * 1024
+        && let Ok(Some(storage)) = window.local_storage()
+    {
+        let b64 = designcraft_engine::cmd::base64_encode(bytes);
+        let _ = storage.set_item(&format!("designcraft_backup:{clean}"), &b64);
     }
 
     let opts = web_sys::RequestInit::new();
@@ -345,11 +348,11 @@ impl eframe::App for WebShell {
                 if matched.is_none() {
                     for sp in &st.doc.spreads {
                         for it in &sp.items {
-                            if it.name.eq_ignore_ascii_case(art_name) || it.label.eq_ignore_ascii_case(art_name) {
-                                if let designcraft_doc::Content::Text(tf) = &it.content {
-                                    matched = Some(tf.story);
-                                    break;
-                                }
+                            if (it.name.eq_ignore_ascii_case(art_name) || it.label.eq_ignore_ascii_case(art_name))
+                                && let designcraft_doc::Content::Text(tf) = &it.content
+                            {
+                                matched = Some(tf.story);
+                                break;
                             }
                         }
                         if matched.is_some() {
@@ -537,8 +540,12 @@ fn services(inbox: Inbox, ctx: egui::Context, active_doc_id: Arc<Mutex<Option<St
                 let enc_id = js_sys::encode_uri_component(template_id).as_string().unwrap_or_else(|| template_id.to_string());
                 let t_url = format!("/api/templates/{enc_id}");
                 let t_name = template_id.to_string();
+                let ctx_f = ctx.clone();
+                let inbox_f = inbox.clone();
                 wasm_bindgen_futures::spawn_local(async move {
-                    load_server_fonts(ctx.clone(), inbox.clone()).await;
+                    load_server_fonts(ctx_f, inbox_f).await;
+                });
+                wasm_bindgen_futures::spawn_local(async move {
                     match fetch_api_bytes(&t_url).await {
                         Ok(Some(bytes)) => {
                             log::info!("Template `{t_name}` loaded ({} bytes)", bytes.len());
@@ -605,32 +612,34 @@ async fn load_server_fonts(ctx: egui::Context, inbox: Inbox) {
         return;
     }
 
-    let array = js_sys::Array::new();
     let loaded = Arc::new(Mutex::new(Vec::new()));
 
-    for item in items {
-        let Some(url) = item.get("url").and_then(|v| v.as_str()).map(|s| s.to_string()) else { continue };
-        let filename = item.get("filename").and_then(|v| v.as_str()).unwrap_or(&url).to_string();
-        let loaded_clone = loaded.clone();
-        let promise = wasm_bindgen_futures::future_to_promise(async move {
-            match fetch_api_bytes(&url).await {
-                Ok(Some(font_bytes)) => {
-                    let count = designcraft_fonts::FontDb::global().add_font(font_bytes.clone());
-                    log::info!("Server font loaded: `{filename}` ({count} face(s))");
-                    if count > 0 {
-                        loaded_clone.lock().unwrap_or_else(|e| e.into_inner()).push((filename, font_bytes));
+    // Fetch fonts in batches of 6 to respect browser socket connection limits and prevent UI jank
+    for chunk in items.chunks(6) {
+        let array = js_sys::Array::new();
+        for item in chunk {
+            let Some(url) = item.get("url").and_then(|v| v.as_str()).map(|s| s.to_string()) else { continue };
+            let filename = item.get("filename").and_then(|v| v.as_str()).unwrap_or(&url).to_string();
+            let loaded_clone = loaded.clone();
+            let promise = wasm_bindgen_futures::future_to_promise(async move {
+                match fetch_api_bytes(&url).await {
+                    Ok(Some(font_bytes)) => {
+                        let count = designcraft_fonts::FontDb::global().add_font(font_bytes.clone());
+                        log::info!("Server font loaded: `{filename}` ({count} face(s))");
+                        if count > 0 {
+                            loaded_clone.lock().unwrap_or_else(|e| e.into_inner()).push((filename, font_bytes));
+                        }
                     }
+                    Ok(None) => log::warn!("Server font `{url}` returned 404"),
+                    Err(e) => log::warn!("Failed to fetch font `{url}`: {e}"),
                 }
-                Ok(None) => log::warn!("Server font `{url}` returned 404"),
-                Err(e) => log::warn!("Failed to fetch font `{url}`: {e}"),
-            }
-            Ok(wasm_bindgen::JsValue::UNDEFINED)
-        });
-        array.push(&promise);
+                Ok(wasm_bindgen::JsValue::UNDEFINED)
+            });
+            array.push(&promise);
+        }
+        let all_promise = js_sys::Promise::all(&array);
+        let _ = wasm_bindgen_futures::JsFuture::from(all_promise).await;
     }
-
-    let all_promise = js_sys::Promise::all(&array);
-    let _ = wasm_bindgen_futures::JsFuture::from(all_promise).await;
 
     let font_list = std::mem::take(&mut *loaded.lock().unwrap_or_else(|e| e.into_inner()));
     if !font_list.is_empty() {

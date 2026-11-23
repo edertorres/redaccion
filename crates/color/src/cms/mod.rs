@@ -239,21 +239,19 @@ fn auto_discover_system_profiles() {
 
 /// Convenience helper to resolve any CMYK profile by name (or auto-discover).
 pub fn resolve_cmyk_profile(name: &str) -> Option<Arc<IccProfile>> {
-    let mut p = user_profile(name);
     #[cfg(not(target_arch = "wasm32"))]
-    if p.is_none() {
-        p = try_find_and_load_profile(name);
-    }
+    let p = user_profile(name).or_else(|| try_find_and_load_profile(name));
+    #[cfg(target_arch = "wasm32")]
+    let p = user_profile(name);
     p.filter(|p| p.kind == ProfileKind::Cmyk)
 }
 
 /// Convenience helper to resolve any Gray profile by name (or auto-discover).
 pub fn resolve_gray_profile(name: &str) -> Option<Arc<IccProfile>> {
-    let mut p = user_profile(name);
     #[cfg(not(target_arch = "wasm32"))]
-    if p.is_none() {
-        p = try_find_and_load_profile(name);
-    }
+    let p = user_profile(name).or_else(|| try_find_and_load_profile(name));
+    #[cfg(target_arch = "wasm32")]
+    let p = user_profile(name);
     p.filter(|p| p.kind == ProfileKind::Gray)
 }
 
@@ -287,11 +285,10 @@ fn rgb_space(name: &str) -> Result<RgbSpace, CmsError> {
     if let Some(p) = builtin_rgb_cache(name) {
         return Ok(RgbSpace::Icc(p));
     }
-    let mut p_opt = user_profile(name);
     #[cfg(not(target_arch = "wasm32"))]
-    if p_opt.is_none() {
-        p_opt = try_find_and_load_profile(name);
-    }
+    let p_opt = user_profile(name).or_else(|| try_find_and_load_profile(name));
+    #[cfg(target_arch = "wasm32")]
+    let p_opt = user_profile(name);
     match p_opt {
         Some(p) if p.kind == ProfileKind::Rgb => Ok(RgbSpace::Icc(p)),
         Some(_) => Err(CmsError::Unsupported(format!("{name} is not an RGB profile"))),

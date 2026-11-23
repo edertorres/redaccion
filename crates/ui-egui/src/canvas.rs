@@ -482,7 +482,6 @@ fn render_texture(app: &mut DesignApp, ctx: &egui::Context, rect: Rect, xf: &Xf,
         app.canvas.shown_doc = Some(doc);
         app.canvas.pending = None;
         app.perf.render_ms = crate::now_ms() - t0;
-        return;
     }
     #[cfg(not(target_arch = "wasm32"))]
     {

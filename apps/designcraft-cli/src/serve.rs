@@ -111,13 +111,87 @@ fn extract_query_param<'a>(raw_path: &'a str, param: &str) -> Option<&'a str> {
 }
 
 #[derive(Clone)]
-struct CachedFont {
-    filename: String,
-    bytes: Vec<u8>,
-    mime: &'static str,
+pub struct FontEntry {
+    pub filename: String,
+    pub path: PathBuf,
+    pub mime: &'static str,
+    pub size: u64,
 }
 
-type FontCache = Arc<std::collections::HashMap<String, CachedFont>>;
+#[derive(Clone)]
+pub struct FontManager {
+    pub dir: PathBuf,
+    pub fallback_dir: Option<PathBuf>,
+    entries: Arc<std::sync::RwLock<std::collections::HashMap<String, FontEntry>>>,
+}
+
+impl FontManager {
+    pub fn new(dir: PathBuf) -> Self {
+        let fallback = if Path::new("assets/fonts").is_dir() { Some(PathBuf::from("assets/fonts")) } else { None };
+        let mut map = std::collections::HashMap::new();
+        if dir.is_dir() {
+            scan_fonts_dir(&dir, &mut map);
+        }
+        if map.is_empty()
+            && let Some(ref fb) = fallback
+        {
+            scan_fonts_dir(fb, &mut map);
+        }
+        Self { dir, fallback_dir: fallback, entries: Arc::new(std::sync::RwLock::new(map)) }
+    }
+
+    pub fn count(&self) -> usize {
+        self.entries.read().map(|m| m.len()).unwrap_or(0)
+    }
+
+    pub fn refresh(&self) {
+        let mut map = std::collections::HashMap::new();
+        if self.dir.is_dir() {
+            scan_fonts_dir(&self.dir, &mut map);
+        }
+        if map.is_empty()
+            && let Some(ref fb) = self.fallback_dir
+        {
+            scan_fonts_dir(fb, &mut map);
+        }
+        if let Ok(mut w) = self.entries.write() {
+            *w = map;
+        }
+    }
+
+    pub fn list(&self) -> Vec<serde_json::Value> {
+        let Ok(map) = self.entries.read() else { return Vec::new() };
+        let mut list: Vec<serde_json::Value> = map
+            .values()
+            .map(|f| {
+                json!({
+                    "filename": f.filename,
+                    "url": format!("/api/fonts/{}", url_encode(&f.filename)),
+                    "size": f.size,
+                })
+            })
+            .collect();
+        list.sort_by(|a, b| a["filename"].as_str().cmp(&b["filename"].as_str()));
+        list
+    }
+
+    pub fn get_bytes(&self, filename: &str) -> Option<(&'static str, Vec<u8>)> {
+        let entry_info = {
+            let Ok(map) = self.entries.read() else { return None };
+            map.get(filename).map(|f| (f.path.clone(), f.mime))
+        };
+        if let Some((path, mime)) = entry_info
+            && let Ok(bytes) = fs::read(&path)
+        {
+            return Some((mime, bytes));
+        }
+        self.refresh();
+        let Ok(map) = self.entries.read() else { return None };
+        let f = map.get(filename)?;
+        let bytes = fs::read(&f.path).ok()?;
+        Some((f.mime, bytes))
+    }
+}
 
 fn font_mime(ext: &str) -> Option<&'static str> {
     match ext.to_ascii_lowercase().as_str() {
@@ -129,17 +203,18 @@ fn font_mime(ext: &str) -> Option<&'static str> {
     }
 }
 
-fn load_fonts_into_cache(dir: &Path, cache: &mut std::collections::HashMap<String, CachedFont>) {
+fn scan_fonts_dir(dir: &Path, map: &mut std::collections::HashMap<String, FontEntry>) {
     let Ok(entries) = fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
         let p = entry.path();
-        if p.is_file() {
+        if p.is_dir() {
+            scan_fonts_dir(&p, map);
+        } else if p.is_file() {
             let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("");
             if let Some(mime) = font_mime(ext) {
                 let filename = p.file_name().unwrap_or_default().to_string_lossy().to_string();
-                if let Ok(bytes) = fs::read(&p) {
-                    cache.insert(filename.clone(), CachedFont { filename, bytes, mime });
-                }
+                let size = p.metadata().map(|m| m.len()).unwrap_or(0);
+                map.insert(filename.clone(), FontEntry { filename, path: p, mime, size });
             }
         }
     }
@@ -198,15 +273,9 @@ pub fn serve(args: &[String]) -> Result<(), String> {
     fs::create_dir_all(&docs_dir).map_err(|e| format!("cannot create `{}`: {e}", docs_dir.display()))?;
     fs::create_dir_all(&fonts_dir).map_err(|e| format!("cannot create `{}`: {e}", fonts_dir.display()))?;
 
-    // Load fonts into server memory RAM
-    let mut raw_font_cache = std::collections::HashMap::new();
-    load_fonts_into_cache(&fonts_dir, &mut raw_font_cache);
-    if raw_font_cache.is_empty() && Path::new("assets/fonts").is_dir() {
-        load_fonts_into_cache(Path::new("assets/fonts"), &mut raw_font_cache);
-    }
-    let font_count = raw_font_cache.len();
-    let font_bytes: usize = raw_font_cache.values().map(|f| f.bytes.len()).sum();
-    let font_cache: FontCache = Arc::new(raw_font_cache);
+    // Initialize dynamic font manager (on-demand streaming, zero-RAM persistent footprint)
+    let font_mgr = FontManager::new(fonts_dir.clone());
+    let font_count = font_mgr.count();
 
     let addr = format!("{bind_addr}:{port}");
     let listener = TcpListener::bind(&addr).map_err(|e| format!("cannot bind {addr}: {e}"))?;
@@ -215,7 +284,7 @@ pub fn serve(args: &[String]) -> Result<(), String> {
     println!("DesignCraft Editorial Server running on http://{addr}");
     println!("  Templates directory: {}", templates_dir.display());
     println!("  Documents directory: {}", docs_dir.display());
-    println!("  Fonts directory:     {} ({} font(s) in RAM, {:.1} MB)", fonts_dir.display(), font_count, font_bytes as f64 / (1024.0 * 1024.0));
+    println!("  Fonts directory:     {} ({} font(s) indexed, on-demand streaming)", fonts_dir.display(), font_count);
     println!("  Web distribution:    {}", dist_dir.display());
     println!("============================================================");
 
@@ -231,11 +300,11 @@ pub fn serve(args: &[String]) -> Result<(), String> {
                 let t_dir = templates_dir.clone();
                 let d_dir = docs_dir.clone();
                 let w_dir = dist_dir.clone();
-                let f_cache = font_cache.clone();
+                let f_mgr = font_mgr.clone();
                 let d_locks = doc_locks.clone();
                 let d_leases = doc_leases.clone();
                 std::thread::spawn(move || {
-                    let _ = handle_connection(stream, &t_dir, &d_dir, &w_dir, &f_cache, &d_locks, &d_leases);
+                    let _ = handle_connection(stream, &t_dir, &d_dir, &w_dir, &f_mgr, &d_locks, &d_leases);
                 });
             }
             Err(e) => {
@@ -252,7 +321,7 @@ fn handle_connection(
     templates: &Path,
     docs: &Path,
     dist: &Path,
-    fonts: &FontCache,
+    fonts: &FontManager,
     locks: &DocLocks,
     leases: &DocLeases,
 ) -> Result<(), String> {
@@ -356,7 +425,7 @@ fn handle_connection(
                         get_or_build_cloud_catalog(templates).unwrap_or_else(|_| json!({"status": "ok", "categories": [], "templates": []}));
                     (fallback, false, Some("No access token provided".to_string()))
                 } else {
-                    match sync_cloud_catalog_with_drive(templates, token, &folder_id) {
+                    match sync_cloud_catalog_with_drive(templates, fonts, token, &folder_id) {
                         Ok(c) => (c, true, None),
                         Err(e) => {
                             eprintln!("[serve] Advertencia sync con Drive ({e}).");
@@ -457,25 +526,44 @@ fn handle_connection(
                 route_document_request(&mut reader, &mut stream, docs, templates, locks, leases, sub, method, content_length)?;
             }
             "fonts" if method == "GET" || method == "HEAD" => {
-                let mut list: Vec<serde_json::Value> = fonts
-                    .values()
-                    .map(|f| {
-                        json!({
-                            "filename": f.filename,
-                            "url": format!("/api/fonts/{}", url_encode(&f.filename)),
-                            "size": f.bytes.len(),
-                        })
-                    })
-                    .collect();
-                list.sort_by(|a, b| a["filename"].as_str().cmp(&b["filename"].as_str()));
+                let list = fonts.list();
                 let body = serde_json::to_string(&list).map_err(|e| e.to_string())?;
                 send_response(&mut stream, 200, "OK", "application/json", body.as_bytes())?;
+            }
+            "fonts/sync" if method == "GET" || method == "POST" => {
+                let query = raw_path.split_once('?').map(|(_, q)| q).unwrap_or("");
+                let token = parse_query_param(query, "token").unwrap_or_default();
+                let folder_id = parse_query_param(query, "folderId").unwrap_or_default();
+                let effective_token =
+                    if token.is_empty() { fs::read_to_string(templates.join("cloud/.drive_token")).unwrap_or_default() } else { token };
+                let effective_token = effective_token.trim();
+                if effective_token.is_empty() {
+                    let err = json!({"status": "error", "error": "No Google Drive access token provided"}).to_string();
+                    send_response(&mut stream, 400, "Bad Request", "application/json", err.as_bytes())?;
+                } else {
+                    match sync_drive_fonts(fonts, effective_token, &folder_id) {
+                        Ok(synced) => {
+                            let resp = json!({
+                                "status": "ok",
+                                "synced": synced,
+                                "total": fonts.count(),
+                                "fonts": fonts.list()
+                            })
+                            .to_string();
+                            send_response(&mut stream, 200, "OK", "application/json", resp.as_bytes())?;
+                        }
+                        Err(e) => {
+                            let err = json!({"status": "error", "error": e}).to_string();
+                            send_response(&mut stream, 500, "Internal Server Error", "application/json", err.as_bytes())?;
+                        }
+                    }
+                }
             }
             p if p.starts_with("fonts/") && (method == "GET" || method == "HEAD") => {
                 let raw_name = p.strip_prefix("fonts/").unwrap_or(p);
                 let name = url_decode(raw_name);
-                if let Some(font) = fonts.get(&name) {
-                    send_cached_response(&mut stream, 200, "OK", font.mime, &font.bytes)?;
+                if let Some((mime, bytes)) = fonts.get_bytes(&name) {
+                    send_cached_response(&mut stream, 200, "OK", mime, &bytes)?;
                 } else {
                     let err = json!({"error": format!("font `{name}` not found")}).to_string();
                     send_response(&mut stream, 404, "Not Found", "application/json", err.as_bytes())?;
@@ -2233,7 +2321,7 @@ struct FolderQueueItem {
     depth: usize,
 }
 
-fn sync_cloud_catalog_with_drive(templates: &Path, token: &str, folder_id: &str) -> Result<serde_json::Value, String> {
+fn sync_cloud_catalog_with_drive(templates: &Path, fonts: &FontManager, token: &str, folder_id: &str) -> Result<serde_json::Value, String> {
     if folder_id.trim().is_empty() {
         return get_or_build_cloud_catalog(templates);
     }
@@ -2255,6 +2343,7 @@ fn sync_cloud_catalog_with_drive(templates: &Path, token: &str, folder_id: &str)
     let mut visited: HashSet<String> = HashSet::new();
     let mut drive_templates = Vec::new();
     let mut cat_counts: HashMap<String, usize> = HashMap::new();
+    let mut fonts_synced = 0;
 
     while let Some(current) = queue.pop_front() {
         if visited.len() >= 200 || current.depth > 6 {
@@ -2313,6 +2402,27 @@ fn sync_cloud_catalog_with_drive(templates: &Path, token: &str, folder_id: &str)
                 images_by_stem.insert(stem, (id.to_string(), name.to_string()));
             } else if lower.ends_with(".idml") || lower.ends_with(".designcraft") || mime.contains("indesign") {
                 folder_templates.push(f.clone());
+            } else if lower.ends_with(".otf") || lower.ends_with(".ttf") || lower.ends_with(".woff") || lower.ends_with(".woff2") {
+                let is_font_category = current.category_path.to_ascii_lowercase().starts_with("fuentes")
+                    || current.category_path.to_ascii_lowercase().starts_with("fonts")
+                    || current.category_path.to_ascii_lowercase().contains("/fonts")
+                    || current.category_path.to_ascii_lowercase().contains("/fuentes");
+
+                let rel_dir = if is_font_category { fonts.dir.join(&current.category_path) } else { fonts.dir.clone() };
+                let _ = fs::create_dir_all(&rel_dir);
+                let font_dest = rel_dir.join(name);
+                if !font_dest.is_file() {
+                    println!("[serve] Sincronizando fuente desde Google Drive: `{name}` (ID: {id})...");
+                    let dl_url = format!("https://www.googleapis.com/drive/v3/files/{id}?alt=media&supportsAllDrives=true");
+                    if run_curl_to_file(
+                        &["-s", "-L", "--connect-timeout", "10", "--max-time", "60", "-H", &format!("Authorization: Bearer {token}"), &dl_url],
+                        &font_dest,
+                    )
+                    .is_ok()
+                    {
+                        fonts_synced += 1;
+                    }
+                }
             }
         }
 
@@ -2444,8 +2554,88 @@ fn sync_cloud_catalog_with_drive(templates: &Path, token: &str, folder_id: &str)
 
     let _ = fs::write(&catalog_file, catalog.to_string());
 
+    if fonts_synced > 0 {
+        fonts.refresh();
+        println!("[serve] Sincronización de fuentes completada: {fonts_synced} nueva(s) fuente(s) descargada(s) desde Google Drive.");
+    }
+
     println!("[serve] Google Drive sincronizado exitosamente: {} maquetas en {} categorías.", drive_templates.len(), categories_list.len());
     Ok(catalog)
+}
+
+fn sync_drive_fonts(fonts: &FontManager, token: &str, folder_id: &str) -> Result<usize, String> {
+    let mut files_to_download = Vec::new();
+
+    if !folder_id.trim().is_empty() {
+        let mut queue = VecDeque::new();
+        queue.push_back((folder_id.to_string(), String::new(), 0usize));
+        let mut visited = HashSet::new();
+        while let Some((f_id, cat_path, depth)) = queue.pop_front() {
+            if visited.len() >= 200 || depth > 6 || !visited.insert(f_id.clone()) {
+                continue;
+            }
+            let Ok(items) = fetch_drive_folder_items(token, &f_id) else { continue };
+            for it in items {
+                let name = it["name"].as_str().unwrap_or("");
+                let mime = it["mimeType"].as_str().unwrap_or("");
+                let id = it["id"].as_str().unwrap_or("");
+                if mime == "application/vnd.google-apps.folder" {
+                    let sub_path = if cat_path.is_empty() { name.to_string() } else { format!("{cat_path}/{name}") };
+                    queue.push_back((id.to_string(), sub_path, depth.saturating_add(1)));
+                    continue;
+                }
+                let lower = name.to_ascii_lowercase();
+                if lower.ends_with(".otf") || lower.ends_with(".ttf") || lower.ends_with(".woff") || lower.ends_with(".woff2") {
+                    files_to_download.push((id.to_string(), name.to_string(), cat_path.clone()));
+                }
+            }
+        }
+    } else {
+        // Query Google Drive for all font files accessible to the user
+        let query = "trashed = false and (name contains '.otf' or name contains '.ttf' or name contains '.woff')";
+        let url = format!(
+            "https://www.googleapis.com/drive/v3/files?q={}&fields=files(id,name,mimeType)&pageSize=500&supportsAllDrives=true&includeItemsFromAllDrives=true",
+            url_encode(query)
+        );
+        let out = run_curl(&["-s", "-H", &format!("Authorization: Bearer {token}"), &url])?;
+        let json_val: serde_json::Value = serde_json::from_slice(&out).map_err(|e| e.to_string())?;
+        if let Some(items) = json_val["files"].as_array() {
+            for it in items {
+                let name = it["name"].as_str().unwrap_or("");
+                let id = it["id"].as_str().unwrap_or("");
+                let lower = name.to_ascii_lowercase();
+                if lower.ends_with(".otf") || lower.ends_with(".ttf") || lower.ends_with(".woff") || lower.ends_with(".woff2") {
+                    files_to_download.push((id.to_string(), name.to_string(), String::new()));
+                }
+            }
+        }
+    }
+
+    let mut count = 0;
+    for (id, name, cat_path) in files_to_download {
+        let rel_dir = if !cat_path.is_empty() { fonts.dir.join(&cat_path) } else { fonts.dir.clone() };
+        let _ = fs::create_dir_all(&rel_dir);
+        let dest = rel_dir.join(&name);
+        if !dest.is_file() {
+            println!("[serve] Descargando fuente desde Google Drive: `{name}` (ID: {id})...");
+            let dl_url = format!("https://www.googleapis.com/drive/v3/files/{id}?alt=media&supportsAllDrives=true");
+            if run_curl_to_file(
+                &["-s", "-L", "--connect-timeout", "10", "--max-time", "60", "-H", &format!("Authorization: Bearer {token}"), &dl_url],
+                &dest,
+            )
+            .is_ok()
+            {
+                count += 1;
+            }
+        }
+    }
+
+    if count > 0 {
+        fonts.refresh();
+        println!("[serve] Sincronización de fuentes completada: {count} nueva(s) fuente(s) descargada(s).");
+    }
+
+    Ok(count)
 }
 
 fn parse_query_param(query: &str, key: &str) -> Option<String> {

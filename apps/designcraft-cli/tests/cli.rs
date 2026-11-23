@@ -106,6 +106,9 @@ fn serve_endpoints_work() {
     std::fs::write(t_dir.join("test_tmpl.designcraft"), b"TEST_TEMPLATE_CONTENT").unwrap();
     std::fs::write(w_dir.join("index.html"), b"<html><body>OK</body></html>").unwrap();
     std::fs::write(f_dir.join("MockFont.ttf"), b"MOCK_FONT_BYTES_12345").unwrap();
+    let sub_f_dir = f_dir.join("NestedFamily");
+    std::fs::create_dir_all(&sub_f_dir).unwrap();
+    std::fs::write(sub_f_dir.join("NestedFont.otf"), b"NESTED_FONT_BYTES_67890").unwrap();
 
     let port = pick_free_port();
     let mut child = cli()
@@ -169,6 +172,7 @@ fn serve_endpoints_work() {
     stream.read_to_string(&mut resp).unwrap();
     assert!(resp.contains("200 OK"));
     assert!(resp.contains("MockFont.ttf"));
+    assert!(resp.contains("NestedFont.otf"));
 
     // 5. Font binary delivery (GET /api/fonts/MockFont.ttf)
     let mut stream = TcpStream::connect(format!("127.0.0.1:{port}")).unwrap();
@@ -180,6 +184,16 @@ fn serve_endpoints_work() {
     assert!(resp_str.contains("font/ttf"));
     assert!(resp_str.contains("Cache-Control: public, max-age=31536000, immutable"));
     assert!(resp.ends_with(b"MOCK_FONT_BYTES_12345"));
+
+    // 5b. Nested font binary delivery (GET /api/fonts/NestedFont.otf)
+    let mut stream = TcpStream::connect(format!("127.0.0.1:{port}")).unwrap();
+    stream.write_all(b"GET /api/fonts/NestedFont.otf HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let mut resp = Vec::new();
+    stream.read_to_end(&mut resp).unwrap();
+    let resp_str = String::from_utf8_lossy(&resp);
+    assert!(resp_str.contains("200 OK"));
+    assert!(resp_str.contains("font/otf"));
+    assert!(resp.ends_with(b"NESTED_FONT_BYTES_67890"));
 
     let _ = child.kill();
     let _ = child.wait();
