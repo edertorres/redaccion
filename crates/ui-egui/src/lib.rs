@@ -1123,4 +1123,41 @@ mod tests {
             assert_eq!(h.state().session.active().unwrap().doc.story(sid).unwrap().text, if caret { "Pegado" } else { "TextoPegado" });
         }
     }
+
+    #[test]
+    fn canvas_ime_handles_spanish_characters_and_ignores_dead_keys() {
+        use egui_kittest::Harness;
+        let mut app = DesignApp::new(Session::new(), Services::default());
+        app.run("file.new", serde_json::json!({})).unwrap();
+        let frame = app.run("frame.create", serde_json::json!({"rect":[36,36,240,160],"content":"text","text":""})).unwrap();
+        app.run("selection.set", serde_json::json!({"ids":[frame["id"]]})).unwrap();
+        app.session.set_tool("type");
+        app.run("text.select", serde_json::json!({"story":frame["story"],"anchor":0,"focus":0})).unwrap();
+        let mut h = Harness::builder().with_size(egui::vec2(1200.0, 900.0)).build_ui_state(
+            |ui, app| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run();
+        // Verify IME output is requested when text caret is active on canvas.
+        assert!(h.output().platform_output.ime.is_some());
+
+        // Browser dead-key artifact "Dead" should be ignored and not inserted.
+        h.event(egui::Event::Text("Dead".into()));
+        // IME commits for Spanish accented vowel and eñe.
+        h.event(egui::Event::Ime(egui::ImeEvent::Commit("á".into())));
+        h.event(egui::Event::Ime(egui::ImeEvent::Commit("ñ".into())));
+        h.event(egui::Event::Text("o".into()));
+        h.run();
+
+        let sid = designcraft_doc::StoryId(frame["story"].as_u64().unwrap());
+        assert_eq!(h.state().session.active().unwrap().doc.story(sid).unwrap().text, "áño");
+
+        // Delete surrounding removes characters properly.
+        h.event(egui::Event::Ime(egui::ImeEvent::DeleteSurrounding { before_chars: 1, after_chars: 0 }));
+        h.run();
+        assert_eq!(h.state().session.active().unwrap().doc.story(sid).unwrap().text, "áñ");
+    }
 }

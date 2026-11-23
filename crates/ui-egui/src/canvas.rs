@@ -1392,6 +1392,27 @@ fn fmt_tick(v: f64) -> String {
     if (v - r).abs() < 1e-6 { format!("{}", r as i64) } else { format!("{v:.1}") }
 }
 
+/// Screen rect of the caret for IME composition positioning.
+fn caret_screen_rect(app: &DesignApp, doc: &Document, layout: &CanvasLayout, xf: &Xf) -> Option<egui::Rect> {
+    let st = app.session.active()?;
+    let ts = st.selection.text?;
+    let cs = app.session.cache.get(doc, ts.story, None);
+    let (fi, x, bl, asc, desc) = match ts.cell {
+        Some(cell) => match cell.footnote_id() {
+            Some(id) => compose::note_caret(&cs, id, ts.focus)?,
+            None => compose::cell_caret(&cs, cell.table, cell.row, cell.col, ts.focus)?,
+        },
+        None => compose::caret(&cs, ts.focus)?,
+    };
+    let ft = cs.frames.get(fi)?;
+    let (a, _) = item_canvas_xf(doc, layout, ft.frame)?;
+    let it = doc.item(ft.frame)?;
+    let m = a * doc.text_xf(it);
+    let p0 = xf.to_screen(m * Point::new(x, bl - asc));
+    let p1 = xf.to_screen(m * Point::new(x, bl + desc));
+    Some(egui::Rect::from_two_pos(p0, p1).expand(2.0))
+}
+
 fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, rect: Rect) {
     let Some(v) = app.view().copied() else { return };
     let xf = Xf::new(rect, &v);
@@ -1523,11 +1544,56 @@ fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, r
     if (ui.ctx().text_edit_focused() && !resp.has_focus()) || app.story_editor.is_some() {
         return;
     }
+    if wants_text && !ui.ctx().text_edit_focused() && app.story_editor.is_none() {
+        if !resp.has_focus() {
+            resp.request_focus();
+        }
+        let (cursor_rect, frame_rect) = if let Some(st) = app.session.active() {
+            let doc = &st.doc;
+            let layout = CanvasLayout::new(doc, st.editing_parents);
+            let crect = caret_screen_rect(app, doc, &layout, &xf);
+            let frect = st.selection.text.and_then(|t| {
+                let f = t.frame.or_else(|| doc.story(t.story).and_then(|s| s.frames.first().copied()))?;
+                let (a, _) = item_canvas_xf(doc, &layout, f)?;
+                let it = doc.item(f)?;
+                Some(xf.rect(a.transform_rect_bbox(it.bounds())))
+            });
+            (crect, frect)
+        } else {
+            (None, None)
+        };
+        let c_rect = cursor_rect.or(frame_rect).unwrap_or(rect);
+        let f_rect = frame_rect.unwrap_or(rect);
+        let to_global = ui.ctx().layer_transform_to_global(ui.layer_id()).unwrap_or_default();
+        ui.output_mut(|o| {
+            o.ime = Some(egui::output::IMEOutput {
+                purpose: egui::IMEPurpose::Normal,
+                rect: to_global * f_rect,
+                cursor_rect: to_global * c_rect,
+                should_interrupt_composition: false,
+            });
+        });
+    }
     let evs = ui.input(|i| i.events.clone());
     for e in evs {
         match e {
             egui::Event::Text(t) if wants_text => {
-                let _ = app.run("text.insert", json!({"text": t}));
+                if !t.is_empty() && t != "Dead" {
+                    let _ = app.run("text.insert", json!({"text": t}));
+                }
+            }
+            egui::Event::Ime(egui::ImeEvent::Commit(t)) if wants_text => {
+                if !t.is_empty() && t != "Dead" {
+                    let _ = app.run("text.insert", json!({"text": t}));
+                }
+            }
+            egui::Event::Ime(egui::ImeEvent::DeleteSurrounding { before_chars, after_chars }) if wants_text => {
+                for _ in 0..before_chars {
+                    let _ = app.run("text.delete", json!({}));
+                }
+                for _ in 0..after_chars {
+                    let _ = app.run("text.delete", json!({"forward": true}));
+                }
             }
             egui::Event::Paste(t)
                 if (wants_text || app.session.editor_mode)

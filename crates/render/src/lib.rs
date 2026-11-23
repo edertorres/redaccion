@@ -1263,6 +1263,22 @@ mod tests {
     }
 
     #[test]
+    fn renders_spanish_special_characters() {
+        let mut d = Document::new(&NewDocument::default());
+        let lid = d.default_layer();
+        let text = "Diseño con tildes: á, é, í, ó, ú, ñ, Ñ, Á, É, Í, Ó, Ú";
+        let (fid, _) = d.add_text_frame(SpreadRef::Doc(0), Rect::new(36.0, 36.0, 500.0, 100.0), lid, text, ParaFormat::default()).unwrap();
+        let cache = Cache::new();
+        let mut r = Renderer::new();
+        r.threads = 0;
+        let img = r.render_page(&d, &cache, 0, 1.0, false, &RenderOptions::default()).unwrap();
+        let dark = (36..500).flat_map(|x| (36..80).map(move |y| (x, y))).filter(|&(x, y)| img.pixel(x, y)[0] < 100).count();
+        assert!(dark > 100, "spanish text pixels: {dark}");
+        assert!(r.stats.glyphs >= text.chars().filter(|c| !c.is_whitespace() && !c.is_ascii_punctuation()).count());
+        let _ = fid;
+    }
+
+    #[test]
     fn text_frame_clips_overflow_and_moves_with_frame() {
         let mut d = Document::new(&NewDocument::default());
         let lid = d.default_layer();
