@@ -579,7 +579,12 @@ impl Renderer {
                 if let Some(ft) = cs.frame(it.id) {
                     match &tf.options.path {
                         Some(pt) => self.draw_path_text(ctx, f, &cs, ft, xf, bp, pt),
-                        None => self.draw_text(ctx, f, &cs, ft, xf * f.doc.text_local(it)),
+                        None => {
+                            ctx.set_transform(f.view * xf);
+                            ctx.push_clip_layer(bp);
+                            self.draw_text(ctx, f, &cs, ft, xf * f.doc.text_local(it));
+                            ctx.pop_layer();
+                        }
                     }
                 }
             }
@@ -1255,6 +1260,43 @@ mod tests {
         assert!(dark > 50, "text pixels: {dark}");
         let _ = fid;
         assert!(r.stats.glyphs >= 15);
+    }
+
+    #[test]
+    fn text_frame_clips_overflow_and_moves_with_frame() {
+        let mut d = Document::new(&NewDocument::default());
+        let lid = d.default_layer();
+        // Frame of height 20pt with multi-line text: only the first line fits inside the frame.
+        let (fid, sid) = d
+            .add_text_frame(
+                SpreadRef::Doc(0),
+                Rect::new(50.0, 50.0, 300.0, 70.0),
+                lid,
+                "First line fits\nSecond line is outside\nThird line is outside",
+                ParaFormat::default(),
+            )
+            .unwrap();
+        let cache = Cache::new();
+        let mut r = Renderer::new();
+        r.threads = 0;
+        let img = r.render_page(&d, &cache, 0, 1.0, false, &RenderOptions::default()).unwrap();
+        // Inside the frame bounds (y in 50..70): text pixels are drawn.
+        let inside = (50..300).flat_map(|x| (50..70).map(move |y| (x, y))).filter(|&(x, y)| img.pixel(x, y)[0] < 100).count();
+        assert!(inside > 20, "text inside frame: {inside}");
+        // Outside the frame bounds (y in 72..150): text must be clipped, so no text pixels drawn.
+        let outside = (50..300).flat_map(|x| (72..150).map(move |y| (x, y))).filter(|&(x, y)| img.pixel(x, y)[0] < 100).count();
+        assert_eq!(outside, 0, "no text drawn outside frame cortina (clipped): {outside}");
+
+        // Now move the frame by (100, 100).
+        d.item_mut(fid).unwrap().xf = Affine::translate((100.0, 100.0));
+        let moved_img = r.render_page(&d, &cache, 0, 1.0, false, &RenderOptions::default()).unwrap();
+        // Old frame location (50..70) is now completely clean paper (all white).
+        let old_area = (50..300).flat_map(|x| (50..70).map(move |y| (x, y))).filter(|&(x, y)| moved_img.pixel(x, y)[0] < 100).count();
+        assert_eq!(old_area, 0, "old area has no leftover text: {old_area}");
+        // New frame location (150..170) has the text.
+        let new_area = (150..400).flat_map(|x| (150..170).map(move |y| (x, y))).filter(|&(x, y)| moved_img.pixel(x, y)[0] < 100).count();
+        assert!(new_area > 20, "text moved with the frame: {new_area}");
+        let _ = sid;
     }
 
     #[test]
